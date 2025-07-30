@@ -1,4 +1,6 @@
-This is a fork from https://github.com/SukkoPera/SMSPlusPlus.
+This is a fork from https://github.com/SukkoPera/SMSPlusPlus
+
+Link to the installation page : https://github.com/SukkoPera/SMSPlusPlus/wiki/Installation
 
 ## Additional Features in the EX Mod Version
 
