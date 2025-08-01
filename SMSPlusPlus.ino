@@ -93,8 +93,8 @@
 /* If leds are enabled, the serial console (useful for debugging) will be
  * disabled
  */
-#define MODE_LED_R_PIN 0
-#define MODE_LED_G_PIN 1
+//#define MODE_LED_R_PIN 0
+//#define MODE_LED_G_PIN 1  //Should not be enabled with fm sound ctrl pin at the same time
 
 // Controller port
 #define PDREG_PAD_PORT DDRC
@@ -122,12 +122,20 @@
 
 //Set FM Sound output at the place of Pad Type
 #define FMSOUND_OUT_PIN 5
+#define JAP_FMSOUND_OUT_PIN 1   // TX1 (D1)
+enum SwitchMode : uint8_t {
+  PSG = 0,
+  FM = 1,
+  JAP_FM = 2
+};
 
-#if !defined(MODE_LED_R_PIN) && !defined(MODE_LED_G_PIN)
-#define ENABLE_SERIAL_DEBUG
-#else
-#warning "Serial debugging disabled"
-#endif
+#define FM_MOD_OFFSET 45
+
+// #if !defined(MODE_LED_R_PIN) && !defined(MODE_LED_G_PIN)
+// #define ENABLE_SERIAL_DEBUG
+// #else
+// #warning "Serial debugging disabled"
+// #endif
 //~ #define DEBUG_PAD
 
 #elif defined(ARDUINO_NANO)
@@ -152,13 +160,13 @@
  *   Pad Port Pin 2 | [X]A1      /  A  \      D8[X] | Pad Port Trace 1
  *   Pad Port Pin 3 | [X]A2      \  N  /      D7[X] | Pad Port Trace 7 => reoplaced by switch control
  *   Pad Port Pin 4 | [X]A3       \_0_/       D6[X]~| Pad Port Pin 7
- *   Pad Port Pin 6 | [X]A4/SDA               D5[X]~| Controller Type Out => replaced by fmsound
+ *   Pad Port Pin 6 | [X]A4/SDA               D5[X]~| Controller Type Out => replaced by FM Sound
  *   Pad Port Pin 9 | [X]A5/SCL               D4[X] | Pause Out
  *   Pause/Reset In | [X]A6              INT1/D3[X]~| Reset Out
  *                  | [ ]A7              INT0/D2[X] | Video Mode
  *              +5V | [X]5V                  GND[X] | GND
  *                  | [ ]RST                 RST[ ] |
- *                  | [ ]GND   5V MOSI GND   TX1[X] | (Led Green)
+ *                  | [ ]GND   5V MOSI GND   TX1[X] | (Led Green) => replaced by JAP FM Sound
  *                  | [ ]Vin   [ ] [ ] [ ]   RX0[X] | (Led Red)
  *                  |          [ ] [ ] [ ]          |
  *                  |          MISO SCK RST         |
@@ -192,8 +200,8 @@
 /* If leds are enabled, the serial console (useful for debugging) will be
  * disabled
  */
-#define MODE_LED_R_PIN 0
-#define MODE_LED_G_PIN 1
+//#define MODE_LED_R_PIN 0
+//#define MODE_LED_G_PIN 1
 
 // Controller port
 #define PDREG_PAD_PORT DDRC
@@ -221,13 +229,21 @@
 
 //Set FM Sound output at the place of Pad Type
 #define FMSOUND_OUT_PIN 5
+#define JAP_FMSOUND_OUT_PIN 1   // TX1 (D1)
+enum SwitchMode : uint8_t {
+  PSG = 0,
+  FM = 1,
+  JAP_FM = 2
+};
+
+#define FM_MOD_OFFSET 45
 
 
-#if !defined(MODE_LED_R_PIN) && !defined(MODE_LED_G_PIN)
-#define ENABLE_SERIAL_DEBUG
-#else
-#warning "Serial debugging disabled"
-#endif
+// #if !defined(MODE_LED_R_PIN) && !defined(MODE_LED_G_PIN)
+// #define ENABLE_SERIAL_DEBUG
+// #else
+// #warning "Serial debugging disabled"
+// #endif
 
 #else
 #error "Unsupported Arduino platform!"
@@ -299,8 +315,9 @@ enum SmsButton {
 #define COMBO_60HZ (MD_BTN_RIGHT | MD_BTN_A)
 
 // Combos for fmsound
-#define COMBO_FM_SOUND_OFF (MD_BTN_LEFT | MD_BTN_C)
-#define COMBO_FM_SOUND_ON (MD_BTN_RIGHT | MD_BTN_C)
+#define COMBO_PSG_SOUND (MD_BTN_DOWN | MD_BTN_A | MD_BTN_B | MD_BTN_C)
+#define COMBO_FM_SOUND (MD_BTN_LEFT | MD_BTN_A | MD_BTN_B | MD_BTN_C)
+#define COMBO_JAP_FM_SOUND (MD_BTN_RIGHT | MD_BTN_A | MD_BTN_B | MD_BTN_C)
 
 /* Combos to switch among autofire modes. These are NOT in addition to
  * TRIGGER_COMBO.
@@ -495,13 +512,43 @@ inline void disableReset() {
 #endif
 
 #ifdef FMSOUND_OUT_PIN
-inline void enableFmSound() {
-	digitalWrite(FMSOUND_OUT_PIN, HIGH);
+
+SwitchMode currentSwitchState = PSG;
+
+void setupFmSoundSwitchState() 
+{
+  pinMode(FMSOUND_OUT_PIN, OUTPUT);
+  pinMode(JAP_FMSOUND_OUT_PIN, OUTPUT);
+
+  currentSwitchState = (SwitchMode)EEPROM.read(FM_MOD_OFFSET);
+	
+  if (currentSwitchState > JAP_FM) {
+    currentSwitchState = PSG;
+  }
+
+	digitalWrite(FMSOUND_OUT_PIN, LOW);
+	digitalWrite(JAP_FMSOUND_OUT_PIN, LOW);
+	delayMicroseconds(100);
+	switch (currentSwitchState) {
+		case FM:
+			digitalWrite(FMSOUND_OUT_PIN, HIGH);
+			break;
+		case JAP_FM:
+			digitalWrite(JAP_FMSOUND_OUT_PIN, HIGH);
+			break;
+		case PSG:
+			break;
+	}
 }
 
-inline void disableFmSound() {
-	digitalWrite(FMSOUND_OUT_PIN, LOW);
+void setFmSoundSwitchStateAndReboot(SwitchMode mode) 
+{
+	if (currentSwitchState != mode) {
+    EEPROM.write(FM_MOD_OFFSET, (uint8_t)mode);
+		reset_console();
+  }
 }
+
 #endif
 
 inline bool isThActive() {
@@ -1244,6 +1291,19 @@ void handle_pad() {
 				if (millis() - last_combo_time > IGNORE_COMBO_MS) {
 					// Look for special combos
 					if ((pad_status & COMBO_TRIGGER) == COMBO_TRIGGER) {
+						
+#ifdef FMSOUND_OUT_PIN
+						if ((pad_status & COMBO_JAP_FM_SOUND) == COMBO_JAP_FM_SOUND) {
+							debugln(F("Enable JAP FM Sound"));
+							setFmSoundSwitchStateAndReboot(JAP_FM);
+						} else if ((pad_status & COMBO_FM_SOUND) == COMBO_FM_SOUND) {
+							debugln(F("Enable FM Sound"));
+							setFmSoundSwitchStateAndReboot(FM);
+						} else if ((pad_status & COMBO_PSG_SOUND) == COMBO_PSG_SOUND) {
+							debugln(F("Enable PSG Sound"));
+							setFmSoundSwitchStateAndReboot(PSG);
+						} else
+#endif
 						if ((pad_status & COMBO_RESET) == COMBO_RESET) {
 							debugln(F("Reset combo detected"));
 							reset_console();
@@ -1255,20 +1315,6 @@ void handle_pad() {
 						} else if ((pad_status & COMBO_60HZ) == COMBO_60HZ) {
 							debugln(F("60 Hz combo detected"));
 							set_mode(VID_60HZ);
-							last_combo_time = millis();
-						} else if ((pad_status & COMBO_FM_SOUND_ON) == COMBO_FM_SOUND_ON) {
-							debugln(F("Enable FM Sound"));
-
-#ifdef FMSOUND_OUT_PIN
-							enableFmSound();
-#endif
-							last_combo_time = millis();
-						} else if ((pad_status & COMBO_FM_SOUND_OFF) == COMBO_FM_SOUND_OFF) {
-							debugln(F("Disable FM Sound"));
-
-#ifdef FMSOUND_OUT_PIN
-							disableFmSound();
-#endif
 							last_combo_time = millis();
 						} else if ((pad_status & COMBO_USE_AB) == COMBO_USE_AB) {
 							debugln(F("Use AB combo detected"));
@@ -1372,6 +1418,10 @@ void setup() {
 	// Prepare reset button
 #if defined(RESET_IN_PIN) && !defined(ARDUINO_NANO)
 	pinMode(RESET_IN_PIN, INPUT_PULLUP);
+#endif
+
+#ifdef FMSOUND_OUT_PIN
+	setupFmSoundSwitchState();
 #endif
 
 	// Finally release the reset line
