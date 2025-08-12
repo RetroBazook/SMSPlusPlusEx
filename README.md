@@ -16,13 +16,13 @@ Compatibility with the Light Phaser is now restored by adding an electronic swit
                                                         74HC4066
                                                       _____________
                                                      |             |
-    Gamepad TH Line (Pad Port Pin 7) =>       IN/OUT1| 1         14| VDD       <= 5V
-    IO Controller (Pad Port Trace 7) =>       OUT/IN1| 2         13| CONT 1    <= Arduino Nano D7
-                                             OUT/IN2 | 3         12| CONT 4    <= GND
-                                             IN/OUT2 | 4         11| IN/OUT4
-                                 GND =>       CONT2  | 5         10| OUT/IN4
-                                 GND =>       CONT3  | 6          9| OUT/IN3
-                                 GND =>         VSS  | 7          8| IN/OUT3
+                     Arduino Nano D6 =>       IN/OUT1| 1         14| VDD       <= 5V
+SMS IO Controller (Pad Port Trace 7) =>       OUT/IN1| 2         13| CONT 1    <= Arduino Nano D7
+                                             OUT/IN2 | 3         12| CONT 4    <= Arduino Nano TX1
+                                             IN/OUT2 | 4         11| IN/OUT4   <= JAP_FM FMSOUND (FMSound board)
+                                 GND =>       CONT2  | 5         10| OUT/IN4   <= GND FMSOUND (FMSound board)
+                     Arduino Nano D5 =>       CONT3  | 6          9| OUT/IN3   <= GND FMSOUND (FMSound board)
+                                 GND =>         VSS  | 7          8| IN/OUT3   <= FM FMSOUND (FMSound board)
                                                      |_____________|
 
 ⚠️ Important:
