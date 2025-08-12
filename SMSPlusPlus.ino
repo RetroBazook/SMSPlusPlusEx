@@ -59,14 +59,14 @@
  *                +5V | [X]5v    -| A |-               9[X]~| Pad Port Trace 2
  *                GND | [X]GND   -| R |-               8[X] | Pad Port Trace 1
  *                    | [ ]GND   -| D |-                    |
- *                    | [ ]Vin   -| U |-               7[X] | Pad Port Trace 7 => replaced by switch control
+ *                    | [ ]Vin   -| U |-               7[X] | Pad Port Trace 7 => replaced by the TH line Control (going to 74HC4066 pin 13)
  *                    |          -| I |-               6[X]~| Pad Port Pin 7
  * Pad Port Pin 1 PC0 | [X]A0    -| N |-               5[X]~| Pause/Reset In
  * Pad Port Pin 2 PC1 | [X]A1    -| O |-               4[X] | Pause Out
  * Pad Port Pin 3 PC2 | [X]A2     +---+           INT1/3[X]~| Reset Out
  * Pad Port Pin 4 PC3 | [X]A3                     INT0/2[X] | Video Mode
- * Pad Port Pin 6 PC4 | [X]A4/SDA  RST SCK MISO     TX>1[ ] | (Led Green)
- * Pad Port Pin 9 PC5 | [X]A5/SCL  [ ] [ ] [ ]      RX<0[ ] | (Led Red)
+ * Pad Port Pin 6 PC4 | [X]A4/SDA  RST SCK MISO     TX>1[ ] | (Led Green) => replaced by Japanese FM Sound Control (going to 74HC4066 pin 14)
+ * Pad Port Pin 9 PC5 | [X]A5/SCL  [ ] [ ] [ ]      RX<0[ ] | (Led Red) => replaced by FM Sound Control (going to 74HC4066 pin 6)
  *                    |            [ ] [ ] [ ]              |
  *                    |  UNO_R3    GND MOSI 5V  ____________/
  *                    \_______________________/
@@ -121,8 +121,8 @@
 // #define POREG_TRACE7 PORTD
 
 //Set FM Sound output at the place of Pad Type
-#define FMSOUND_OUT_PIN 5
-#define JAP_FMSOUND_OUT_PIN 1   // TX1 (D1)
+#define FMSOUND_OUT_PIN 0   // RX0
+#define JAP_FMSOUND_OUT_PIN 1   // TX1
 enum SwitchMode : uint8_t {
   PSG = 0,
   FM = 1,
@@ -158,16 +158,16 @@ enum SwitchMode : uint8_t {
  *                  | [ ]V.ref     ___    SS/D10[X]~| Pad Port Trace 3
  *   Pad Port Pin 1 | [X]A0       / N \       D9[X]~| Pad Port Trace 2
  *   Pad Port Pin 2 | [X]A1      /  A  \      D8[X] | Pad Port Trace 1
- *   Pad Port Pin 3 | [X]A2      \  N  /      D7[X] | Pad Port Trace 7 => reoplaced by switch control
+ *   Pad Port Pin 3 | [X]A2      \  N  /      D7[X] | Pad Port Trace 7 => replaced by the TH line Control (going to 74HC4066 pin 13)
  *   Pad Port Pin 4 | [X]A3       \_0_/       D6[X]~| Pad Port Pin 7
- *   Pad Port Pin 6 | [X]A4/SDA               D5[X]~| Controller Type Out => replaced by FM Sound
+ *   Pad Port Pin 6 | [X]A4/SDA               D5[X]~| Controller Type Out => replaced by FM Sound Control (going to 74HC4066 pin 6)
  *   Pad Port Pin 9 | [X]A5/SCL               D4[X] | Pause Out
  *   Pause/Reset In | [X]A6              INT1/D3[X]~| Reset Out
  *                  | [ ]A7              INT0/D2[X] | Video Mode
  *              +5V | [X]5V                  GND[X] | GND
  *                  | [ ]RST                 RST[ ] |
- *                  | [ ]GND   5V MOSI GND   TX1[X] | (Led Green) => replaced by JAP FM Sound
- *                  | [ ]Vin   [ ] [ ] [ ]   RX0[X] | (Led Red)
+ *                  | [ ]GND   5V MOSI GND   TX1[X] | (Led Green) => replaced by Japanese FM Sound Control (going to 74HC4066 pin 14)
+ *                  | [ ]Vin   [ ] [ ] [ ]   RX0[X] | (Led Red) => unused
  *                  |          [ ] [ ] [ ]          |
  *                  |          MISO SCK RST         |
  *                  | NANO-V3                       |
@@ -228,8 +228,8 @@ enum SwitchMode : uint8_t {
 // #define POREG_TRACE7 PORTD
 
 //Set FM Sound output at the place of Pad Type
-#define FMSOUND_OUT_PIN 5
-#define JAP_FMSOUND_OUT_PIN 1   // TX1 (D1)
+#define FMSOUND_OUT_PIN 5  //D5
+#define JAP_FMSOUND_OUT_PIN 1   // TX1
 enum SwitchMode : uint8_t {
   PSG = 0,
   FM = 1,
