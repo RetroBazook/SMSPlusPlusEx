@@ -9,28 +9,39 @@ Link to the installation page : https://github.com/SukkoPera/SMSPlusPlus/wiki/In
 ⚠️ Works with an Arduino Nano. Untested with an Arduino Uno ⚠️
 
 
-1) Restored Compatibility with the Light Phaser.
+1) Restored Light Phaser compatibility
 
-Compatibility with the Light Phaser is now restored by adding an electronic switch using a 74HC4066 (tested and working).
+Light Phaser compatibility has been restored by adding an electronic switch using a 74HC4066 IC (tested and working).
+
+2) FM Sound mode control with etim FMSound installed
+
+Adds sound mode control when an etim FMSound board is installed. 
+The 74HC4066 IC is also required to control the FMSound board (tested on a French PAL M4jr model).
 
                                                         74HC4066
                                                       _____________
                                                      |             |
-    Gamepad TH Line (Pad Port Pin 7) =>       IN/OUT1| 1         14| VDD       <= 5V
-    IO Controller (Pad Port Trace 7) =>       OUT/IN1| 2         13| CONT 1    <= Arduino Nano D7
-                                             OUT/IN2 | 3         12| CONT 4    <= GND
-                                             IN/OUT2 | 4         11| IN/OUT4
-                                 GND =>       CONT2  | 5         10| OUT/IN4
-                                 GND =>       CONT3  | 6          9| OUT/IN3
-                                 GND =>         VSS  | 7          8| IN/OUT3
+                     Arduino Nano D6 =>       IN/OUT1| 1         14| VDD       <= 5V
+SMS IO Controller (Pad Port Trace 7) =>       OUT/IN1| 2         13| CONT 1    <= Arduino Nano D7
+                                             OUT/IN2 | 3         12| CONT 4    <= Arduino Nano TX1
+                                             IN/OUT2 | 4         11| IN/OUT4   <= JAP_FM FMSOUND (FMSound board)
+                                 GND =>       CONT2  | 5         10| OUT/IN4   <= GND FMSOUND (FMSound board)
+                     Arduino Nano D5 =>       CONT3  | 6          9| OUT/IN3   <= GND FMSOUND (FMSound board)
+                                 GND =>         VSS  | 7          8| IN/OUT3   <= FM FMSOUND (FMSound board)
                                                      |_____________|
 
 ⚠️ Important:
-The mod installation is the same as the original mod, except for the following points:
 
-- Pad Port Trace 7 should no longer be connected to the Arduino. Instead, it must be soldered to pin 2 of the 74HC4066.
-- Arduino pin D7 is now connected to the 74HC4066 CONT 1 (pin 13).
-- Pad Port Pin 7 remains connected to the Arduino Nano D6 pin, but is now also connected to pin 1 of the 74HC4066.
+There are installation differences from the original mod:
+
+- Pad Port Trace 7 (to IO Controller IC) should no longer be connected to the Arduino. It must be connected to pin 2 of the 74HC4066.
+- Arduino D7 should be connected to 74HC4066 CONT1 (pin 13).
+- Pad Port Pin 7 remains connected to Arduino Nano D6, but is also connected to pin 1 of the 74HC4066.
+- Arduino D5 (FMSOUND_OUT_PIN) should be connected to 74HC4066 CONT3 (pin 6).
+- Arduino TX1 (JAP_FMSOUND_OUT_PIN) should be connected to 74HC4066 CONT4 (pin 11).
+
+For the etim FMSound board, the cables that were originally soldered to the 3-position switch must now be soldered to the 74HC4066 (see diagram above).
+
 
 2) Improved Bluetooth Receiver Compatibility
 
@@ -41,10 +52,10 @@ This gives enough time for even the slowest dongles to sync before the check.
 
 3) New Button Combos
 
-  a) FM Sound Card Toggle
-  (FM control pin now connected to D5 on Arduino, replacing the former "Controller Type Out")
-  FM Sound OFF: Start + C + Left
-  FM Sound ON: Start + C + Right
+  a) Sound mode
+  Enable FM Sound and reset: Start + Left + A + B + C
+  Enable Japanese FM Sound and reset: Start + Right + A + B + C
+  Enable PSG Sound and reset: Start + Down + A + B + C
 
   b) AB / BC Mode Selection (BC is default)
   Use BC: Start + B + Right
