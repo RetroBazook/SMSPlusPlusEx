@@ -668,7 +668,7 @@ void save_mode() {
 void save_use_ab() {
 	if (shouldSaveUseABState) {
 		EEPROM.update(PAD_AB_OFFSET, padUseAB ? 1 : 0);
-		blinkBuiltInLed(4);
+		blinkBuiltInLed(1);
 		shouldSaveUseABState = false;
 	}
 }
@@ -676,7 +676,7 @@ void save_use_ab() {
 void save_swap_buttons() {
 	if (shouldSaveSwapButtonsState) {
 		EEPROM.update(SWAP_BTN_OFFSET, swapButtons ? 1 : 0);
-		blinkBuiltInLed(4);
+		blinkBuiltInLed(1);
 		shouldSaveSwapButtonsState = false;
 	}
 }
@@ -875,10 +875,10 @@ inline void blinkBuiltInLed(int nbBlink)
 {
 	byte originalState = digitalRead(LED_BUILTIN);
 	bool ledState = (originalState != LOW);
-	for (int i = 0; i < nbBlink; i++) {
+	for (int i = 0; i < (nbBlink * 2); i++) {
 		ledState = !ledState;
 		digitalWrite(LED_BUILTIN, ledState ? HIGH : LOW);
-		delay(125);
+		delay(400);
 	}
 	digitalWrite(LED_BUILTIN, originalState);
 }
@@ -897,7 +897,6 @@ void check_gamepad()
 	if (isThActive()) {
 		//Light phaser detected
 		setup_sms_pad();
-		blinkBuiltInLed(12);
 		return;
 	}
 
@@ -928,12 +927,10 @@ void check_gamepad()
 		*
 		* Now let's check if it has 3 or 6 buttons
 		*/
-		blinkBuiltInLed(2);
 		setup_md_pad();
 		return;
 
 	} else if (highSelectBtnPressed) {
-		blinkBuiltInLed(4);
 		setup_sms_pad();
 		return;
 	}
@@ -951,9 +948,6 @@ void setup_sms_pad() {
 	digitalWrite(TI4066_CONTROL_PIN, HIGH);
 
 	padType = PAD_SMS;
-
-	debugln(F("Detected Master System pad"));
-
 }
 
 void setup_md_pad() {
@@ -1000,12 +994,6 @@ void setup_md_pad() {
 
 	// Bring select line high again
 	setSelect(HIGH);
-
-	if (padType == PAD_MD) {
-		debugln(F("Detected Mega Drive pad"));
-	} else {
-		debugln(F("Detected Mega Drive 6-Button pad"));
-	}
 }
 
 void setup_traces() {
@@ -1441,6 +1429,20 @@ void loop() {
 		check_gamepad();
 		if (padType == PAD_NONE) {
 			return;
+		}
+		switch(padType)
+		{
+			case PAD_SMS:
+			blinkBuiltInLed(2);
+			break;
+
+			case PAD_MD:
+			blinkBuiltInLed(3);
+			break;
+
+			case PAD_MD_6BTN:
+			blinkBuiltInLed(6);
+			break;
 		}
 	}
 
