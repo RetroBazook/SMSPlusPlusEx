@@ -293,6 +293,8 @@ enum SmsButton {
 	SMS_BTN_B2 = SMS_BTN_TR
 };
 
+static int remapIndex = -1;
+
 /* Button combo that enables the other combos
  *
  * Note: That vertical bar ("pipe") means that the buttons must be pressed
@@ -300,10 +302,7 @@ enum SmsButton {
  */
 #define COMBO_TRIGGER MD_BTN_START
 
-#define COMBO_USE_AB (MD_BTN_LEFT | MD_BTN_B)
-#define COMBO_USE_BC (MD_BTN_RIGHT | MD_BTN_B)
-#define COMBO_SWAP_BTN_ON (MD_BTN_DOWN | MD_BTN_B)
-#define COMBO_SWAP_BTN_OFF (MD_BTN_UP | MD_BTN_B)
+#define COMBO_REMAP (MD_BTN_X | MD_BTN_Y | MD_BTN_Z)
 
 /* Button combos to perform other actions. These are to be considered in
  * addition to TRIGGER_COMBO.
@@ -320,9 +319,7 @@ enum SmsButton {
 #define COMBO_JAP_FM_SOUND (MD_BTN_RIGHT | MD_BTN_A | MD_BTN_B | MD_BTN_C)
 
 // Combos for autofire
-#define COMBO_AUTOFIRE_X (MD_BTN_X)
-#define COMBO_AUTOFIRE_Y (MD_BTN_Y)
-#define COMBO_AUTOFIRE_Z (MD_BTN_Z)
+#define COMBO_TRIGGER_AUTOFIRE (MD_BTN_UP)
 
 // Define this to use A as B+C. When padUseAB is enabled, C = A+B.
 #define PAD_USE_THIRD_BTN_AS_2BTNS
@@ -336,8 +333,7 @@ enum SmsButton {
  * disable mode saving.
  */
 #define MODE_ROM_OFFSET 42
-#define PAD_AB_OFFSET 43
-#define SWAP_BTN_OFFSET 44
+#define REMAP_OFFSET 43
 
 // Time to wait after mode change before saving the new mode (milliseconds)
 #define MODE_SAVE_DELAY 3000L
@@ -457,11 +453,26 @@ VideoMode current_mode = VID_50HZ;
 AutoFireButton afStatusL = { AF_MEDIUM, 0 };
 AutoFireButton afStatusR = { AF_MEDIUM, 0 };
 
-boolean padUseAB = false;
-boolean shouldSaveUseABState = false;
 
-boolean swapButtons = false;
-boolean shouldSaveSwapButtonsState = false;
+MdButton buttonsMap[] = {
+	MD_BTN_B,
+	MD_BTN_C,
+	MD_BTN_A,
+	MD_BTN_Y,
+	MD_BTN_Z,
+	MD_BTN_X
+};
+
+MdButton& btnL = buttonsMap[0];
+MdButton& btnR = buttonsMap[1];
+MdButton& btnLandR = buttonsMap[2];
+MdButton& btnAutoL = buttonsMap[3];
+MdButton& btnAutoR = buttonsMap[4];
+MdButton& btnAutoLandR = buttonsMap[5];
+
+const int BTN_MAP_SIZE = sizeof(buttonsMap) / sizeof(buttonsMap[0]);
+
+bool shouldSaveRemap = false;
 
 bool startPreviouslyPressed = false;
 
@@ -550,24 +561,6 @@ void setFmSoundSwitchStateAndReboot(SwitchMode mode)
 
 inline bool isThActive() {
 	return !(PIND & (1 << SELECT_PAD_PIN)); // TH = LOW → active
-}
-
-inline void setPadUseAB() {
-	if (padUseAB) return;
-	padUseAB = true;
-	shouldSaveUseABState = true;
-}
-
-inline void setPadUseAC() {
-	if (!padUseAB) return;
-	padUseAB = false;
-	shouldSaveUseABState = true;
-}
-
-inline void setSwapButtons(bool enableSwap) {
-	if (swapButtons == enableSwap) return;
-	swapButtons = enableSwap;
-	shouldSaveSwapButtonsState = true;
 }
 
 /* Ditto for the PAUSE line
@@ -662,20 +655,69 @@ void save_mode() {
 #endif  // MODE_ROM_OFFSET
 }
 
-void save_use_ab() {
-	if (shouldSaveUseABState) {
-		EEPROM.update(PAD_AB_OFFSET, padUseAB ? 1 : 0);
-		//blinkBuiltInLed(1);
-		shouldSaveUseABState = false;
+void save_remap() {
+	if (shouldSaveRemap) {
+		for (int i = 0; i < BTN_MAP_SIZE; i++) {
+				uint16_t val = (uint16_t)buttonsMap[i];
+				EEPROM.update(REMAP_OFFSET + i * 2, val & 0xFF);        // low byte
+				EEPROM.update(REMAP_OFFSET + i * 2 + 1, val >> 8);      // high byte
+		}
+		shouldSaveRemap = false;
 	}
 }
 
-void save_swap_buttons() {
-	if (shouldSaveSwapButtonsState) {
-		EEPROM.update(SWAP_BTN_OFFSET, swapButtons ? 1 : 0);
-		//blinkBuiltInLed(1);
-		shouldSaveSwapButtonsState = false;
-	}
+inline void loadMapping() 
+{
+    bool corrupted = false;
+
+    // Default mapping
+    const MdButton defaultMap[BTN_MAP_SIZE] = {
+        MD_BTN_B, MD_BTN_C, MD_BTN_A,
+        MD_BTN_Y, MD_BTN_Z, MD_BTN_X
+    };
+
+    for (int i = 0; i < BTN_MAP_SIZE; i++) {
+        uint8_t low = EEPROM.read(REMAP_OFFSET + i * 2);
+        uint8_t high = EEPROM.read(REMAP_OFFSET + i * 2 + 1);
+
+        // If EEPROM is blank (0xFF 0xFF) → use default mapping
+        if (low == 0xFF && high == 0xFF) {
+            buttonsMap[i] = defaultMap[i];
+            corrupted = true;
+            continue;
+        }
+
+        uint16_t val = (uint16_t)low | ((uint16_t)high << 8);
+
+        // Check for duplicates in already loaded buttons
+        bool duplicate = false;
+        for (int j = 0; j < i; j++) {
+            if (buttonsMap[j] == (MdButton)val) {
+                duplicate = true;
+                break;
+            }
+        }
+
+        // If value is out of valid range or already mapped → use default
+        if (val > MD_BTN_Z || duplicate) {
+            buttonsMap[i] = defaultMap[i];
+            corrupted = true;
+        } else {
+            buttonsMap[i] = (MdButton)val;
+        }
+    }
+
+    // If any invalid, blank or duplicate values were found → request a save
+    if (corrupted) {
+        Serial.println(F("EEPROM mapping invalid, blank or duplicate → applying default mapping"));
+        shouldSaveRemap = true;
+    }
+}
+
+void remapButton(int index, MdButton mdButton) {
+    if (index >= 0 && index < BTN_MAP_SIZE) {
+        buttonsMap[index] = mdButton;
+    }
 }
 
 void set_mode(VideoMode m) {
@@ -868,18 +910,133 @@ void setup_pad() {
 	POREG_PAD |= PDREG_PAD_BITS;          // ... with pull-ups
 }
 
-inline void blinkBuiltInLed(int nbBlink)
-{
-	byte originalState = digitalRead(LED_BUILTIN);
-	bool ledState = (originalState != LOW);
-	for (int i = 0; i < (nbBlink * 2); i++) {
+static unsigned long previousMillis = 0;
+static bool ledState = HIGH;
+static int remainingToggles = 0;  // <0 : infini
+const unsigned long BLINK_DURATION = 400; // ms
+
+inline void blinkBuiltInLed(int nbBlink) {
+	for (int i = 0; i < (nbBlink * 2); i++) 
+	{
 		ledState = !ledState;
 		digitalWrite(LED_BUILTIN, ledState ? HIGH : LOW);
-		delay(400);
+		delay(BLINK_DURATION);
 	}
-	digitalWrite(LED_BUILTIN, originalState);
+	ledState = HIGH;
+	digitalWrite(LED_BUILTIN, ledState);
 }
 
+inline void startBlinkAsync(int nbBlink = 0) {
+	if (remainingToggles == 0) {
+		ledState = LOW;
+		digitalWrite(LED_BUILTIN, ledState);
+		remainingToggles = (nbBlink > 0) ? nbBlink * 2 : -1;
+		previousMillis = millis();
+	}
+}
+
+inline void updateBlinkAsync() {
+	if (remainingToggles != 0 && millis() - previousMillis >= BLINK_DURATION) 
+	{
+		previousMillis = millis();
+		ledState = !ledState;
+		digitalWrite(LED_BUILTIN, ledState ? HIGH : LOW);
+		if (remainingToggles > 0) 
+		{
+			remainingToggles--;
+			if (remainingToggles == 0) {
+					ledState = HIGH;
+					digitalWrite(LED_BUILTIN, ledState);
+			}
+		}
+	}
+}
+
+void startRemapButtons() {
+	// Clear the mapping table
+	for (int i = 0; i < BTN_MAP_SIZE; i++) {
+			buttonsMap[i] = (MdButton)0; // 0 means "not mapped"
+	}
+
+	remapIndex = 0;          // start from the first button
+	startBlinkAsync();      // start LED blinking to indicate remap mode
+	Serial.println("Remapping started...");
+}
+
+void updateRemapButtons() {
+    static uint32_t blockUntil = 0;
+    static uint16_t lastPadState = 0;
+    static bool firstStableRead = false;
+
+		if(remapIndex == -1) return;
+
+    // Ignore reads until debounce delay is over
+    if (millis() < blockUntil) {
+        return;
+    }
+
+    // Read masked pad state
+    word pad = read_md_pad();
+
+    // Only accept if exactly one bit is set
+    bool oneButton = (pad != 0) && ((pad & (pad - 1)) == 0);
+
+    if (oneButton) {
+        if (!firstStableRead) {
+            lastPadState = pad;    // Store first read
+            firstStableRead = true;
+            return;                // Wait for confirmation on next loop
+        } else {
+            if (pad != lastPadState) {
+                firstStableRead = false; // Not stable, reset
+                return;
+            }
+        }
+    } else {
+        firstStableRead = false; // Reset if not one button
+        return;
+    }
+
+    // Convert to MdButton
+    MdButton btn = convertOneKeyPadToMdButton(pad);
+
+    // Avoid duplicates
+    for (int i = 0; i < remapIndex; i++) {
+        if (buttonsMap[i] == btn) return;
+    }
+
+    // Assign button
+    if (remapIndex < BTN_MAP_SIZE) {
+        buttonsMap[remapIndex++] = btn;
+    }
+
+    // If mapping complete
+    if (remapIndex >= BTN_MAP_SIZE) {
+        shouldSaveRemap = true;
+        remapIndex = -1;
+    }
+
+    // Start debounce block period (300 ms)
+    blockUntil = millis() + 300;
+}
+
+MdButton convertOneKeyPadToMdButton(word pad) {
+    switch (pad) {
+        case MD_BTN_A: return MD_BTN_A;
+        case MD_BTN_B: return MD_BTN_B;
+        case MD_BTN_C: return MD_BTN_C;
+        case MD_BTN_X: return MD_BTN_X;
+        case MD_BTN_Y: return MD_BTN_Y;
+        case MD_BTN_Z: return MD_BTN_Z;
+        default:       return (MdButton)0xFFFF; // Invalid
+    }
+}
+
+inline void stopBlinkAsync() {
+	remainingToggles = 0;
+	ledState = HIGH;
+	digitalWrite(LED_BUILTIN, ledState);
+}
 inline bool anyButtonPressed(byte port) {
 	return port != 0b00111111;
 }
@@ -1135,7 +1292,10 @@ inline byte read_sms_pad() {
 	return pad_status;
 }
 
-inline void write_sms_pad(byte pad_status) {
+inline void write_sms_pad(byte pad_status) 
+{
+	if(remapIndex != -1) { return; } //Dont write during remapping
+	
 #ifdef DEBUG_PAD
 	debug(F("Sending SMS pad status: "));
 	debugln(pad_status, BIN);
@@ -1168,56 +1328,6 @@ inline byte mdPadToSms(word mdPad) {
 	smsPad |= (mdPad & MD_BTN_DOWN) ? SMS_BTN_DOWN : 0x00;
 	smsPad |= (mdPad & MD_BTN_LEFT) ? SMS_BTN_LEFT : 0x00;
 	smsPad |= (mdPad & MD_BTN_RIGHT) ? SMS_BTN_RIGHT : 0x00;
-	
-	int btnL;
-	int btnR;
-	int btnLandR;
-	int btnAutoL;
-	int btnAutoR;
-	int btnAutoLandR;
-
-	if (padUseAB) 
-	{
-		if (swapButtons) 
-		{
-			btnL = MD_BTN_B;
-			btnR = MD_BTN_A;
-			btnLandR = MD_BTN_C;
-			btnAutoL = MD_BTN_Y;
-			btnAutoR = MD_BTN_X;
-			btnAutoLandR = MD_BTN_Z;
-		} 
-		else 
-		{
-			btnL = MD_BTN_A;
-			btnR = MD_BTN_B;
-			btnLandR = MD_BTN_C;
-			btnAutoL = MD_BTN_X;
-			btnAutoR = MD_BTN_Y;
-			btnAutoLandR = MD_BTN_Z;
-		}
-	} 
-	else 
-	{
-		if (swapButtons) 
-		{
-			btnL = MD_BTN_C;
-			btnR = MD_BTN_B;
-			btnLandR = MD_BTN_A;
-			btnAutoL = MD_BTN_Z;
-			btnAutoR = MD_BTN_Y;
-			btnAutoLandR = MD_BTN_X;
-		} 
-		else 
-		{
-			btnL = MD_BTN_B;
-			btnR = MD_BTN_C;
-			btnLandR = MD_BTN_A;
-			btnAutoL = MD_BTN_Y;
-			btnAutoR = MD_BTN_Z;
-			btnAutoLandR = MD_BTN_X;
-		}
-	}
 	
 	bool autoFireL_pressed = mdPad & (btnAutoLandR | btnAutoL);
 	bool autoFireR_pressed = mdPad & (btnAutoLandR | btnAutoR);
@@ -1289,7 +1399,11 @@ void handle_pad() {
 							setFmSoundSwitchStateAndReboot(PSG);
 						} else
 #endif
-						if ((pad_status & COMBO_RESET) == COMBO_RESET) {
+						if ((pad_status & COMBO_REMAP) == COMBO_REMAP) {
+							debugln(F("Remap combo detected"));
+							startRemapButtons();
+							last_combo_time = millis();
+						}else if ((pad_status & COMBO_RESET) == COMBO_RESET) {
 							debugln(F("Reset combo detected"));
 							reset_console();
 							last_combo_time = millis();
@@ -1301,30 +1415,15 @@ void handle_pad() {
 							debugln(F("60 Hz combo detected"));
 							set_mode(VID_60HZ);
 							last_combo_time = millis();
-						} else if ((pad_status & COMBO_USE_AB) == COMBO_USE_AB) {
-							debugln(F("Use AB combo detected"));
-							setPadUseAB();
+						} else if ((pad_status & (COMBO_TRIGGER_AUTOFIRE | btnAutoL)) == (COMBO_TRIGGER_AUTOFIRE | btnAutoL)) {
+							cycleAutoFire(afStatusL);
 							last_combo_time = millis();
-						} else if ((pad_status & COMBO_USE_BC) == COMBO_USE_BC) {
-							debugln(F("Use BC combo detected"));
-							setPadUseAC();
+						} else if ((pad_status & (COMBO_TRIGGER_AUTOFIRE | btnAutoR)) == (COMBO_TRIGGER_AUTOFIRE | btnAutoR)) {
+							cycleAutoFire(afStatusR);
 							last_combo_time = millis();
-						} else if ((pad_status & COMBO_SWAP_BTN_ON) == COMBO_SWAP_BTN_ON) {
-							debugln(F("Enable swap button combo detected"));
-							setSwapButtons(true);
-							last_combo_time = millis();
-						} else if ((pad_status & COMBO_SWAP_BTN_OFF) == COMBO_SWAP_BTN_OFF) {
-							debugln(F("Disable swap button combo detected"));
-							setSwapButtons(false);
-							last_combo_time = millis();
-						} else if ((pad_status & COMBO_AUTOFIRE_X) == COMBO_AUTOFIRE_X) {
-							cycleAutoFireFromBtn(MD_BTN_X);
-							last_combo_time = millis();
-						} else if ((pad_status & COMBO_AUTOFIRE_Y) == COMBO_AUTOFIRE_Y) {
-							cycleAutoFireFromBtn(MD_BTN_Y);
-							last_combo_time = millis();
-						} else if ((pad_status & COMBO_AUTOFIRE_Z) == COMBO_AUTOFIRE_Z) {
-							cycleAutoFireFromBtn(MD_BTN_Z);
+						} else if ((pad_status & (COMBO_TRIGGER_AUTOFIRE | btnAutoLandR)) == (COMBO_TRIGGER_AUTOFIRE | btnAutoLandR)) {
+							cycleAutoFire(afStatusL);
+							cycleAutoFire(afStatusR);
 							last_combo_time = millis();
 						}
 					}
@@ -1336,76 +1435,6 @@ void handle_pad() {
 
 				break;
 			}
-	}
-}
-
-void cycleAutoFireFromBtn(MdButton button)
-{
-	if (padUseAB) 
-	{
-		if (swapButtons) 
-		{
-			switch(button){
-				case MD_BTN_X:
-				cycleAutoFire(afStatusR);
-				return;
-				case MD_BTN_Y:
-				cycleAutoFire(afStatusL);
-				return;
-				case MD_BTN_Z:
-				cycleAutoFire(afStatusL);
-				cycleAutoFire(afStatusR);
-				return;
-			}
-		} 
-		else 
-		{
-			switch(button){
-				case MD_BTN_X:
-				cycleAutoFire(afStatusL);
-				return;
-				case MD_BTN_Y:
-				cycleAutoFire(afStatusR);
-				return;
-				case MD_BTN_Z:
-				cycleAutoFire(afStatusL);
-				cycleAutoFire(afStatusR);
-				return;
-			}
-		}
-	} 
-	else 
-	{
-		if (swapButtons) 
-		{
-			switch(button){
-				case MD_BTN_X:
-				cycleAutoFire(afStatusL);
-				cycleAutoFire(afStatusR);
-				return;
-				case MD_BTN_Y:
-				cycleAutoFire(afStatusR);
-				return;
-				case MD_BTN_Z:
-				cycleAutoFire(afStatusL);
-				return;
-			}
-		} 
-		else 
-		{
-			switch(button){
-				case MD_BTN_X:
-				cycleAutoFire(afStatusL);
-				cycleAutoFire(afStatusR);
-				return;
-				case MD_BTN_Y:
-				cycleAutoFire(afStatusL);
-				return;
-				case MD_BTN_Z:
-				cycleAutoFire(afStatusR);
-				return;
-			}
-		}
 	}
 }
 
@@ -1452,8 +1481,7 @@ void setup() {
 	set_mode(current_mode);
 	mode_last_changed_time = 0;  // No need to save what we just loaded
 
-	loadUseABState();
-	loadSwapButtonsState();
+	loadMapping();
 
 	// Prepare to read pad
 	setup_pad();
@@ -1483,14 +1511,6 @@ void setup() {
 	disableReset();
 }
 
-inline void loadUseABState() {
-	padUseAB = (EEPROM.read(PAD_AB_OFFSET) != 0);
-}
-
-inline void loadSwapButtonsState() {
-	swapButtons = (EEPROM.read(SWAP_BTN_OFFSET) != 0);
-}
-
 void loop() {
 	if (padType == PAD_NONE) {
 		check_gamepad();
@@ -1515,7 +1535,8 @@ void loop() {
 
 	handle_reset_button();
 	handle_pad();
+	updateRemapButtons();
+	updateBlinkAsync();
 	save_mode();
-	save_use_ab();
-	save_swap_buttons();
+	save_remap();
 }
