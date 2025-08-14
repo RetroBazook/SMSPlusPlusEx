@@ -319,12 +319,10 @@ enum SmsButton {
 #define COMBO_FM_SOUND (MD_BTN_LEFT | MD_BTN_A | MD_BTN_B | MD_BTN_C)
 #define COMBO_JAP_FM_SOUND (MD_BTN_RIGHT | MD_BTN_A | MD_BTN_B | MD_BTN_C)
 
-/* Combos to switch among autofire modes. These are NOT in addition to
- * TRIGGER_COMBO.
- */
-#define COMBO_AUTOFIRE_X (MD_BTN_START | MD_BTN_X)
-#define COMBO_AUTOFIRE_Y (MD_BTN_START | MD_BTN_Y)
-#define COMBO_AUTOFIRE_Z (MD_BTN_START | MD_BTN_Z)
+// Combos for autofire
+#define COMBO_AUTOFIRE_X (MD_BTN_X)
+#define COMBO_AUTOFIRE_Y (MD_BTN_Y)
+#define COMBO_AUTOFIRE_Z (MD_BTN_Z)
 
 // Define this to use A as B+C. When padUseAB is enabled, C = A+B.
 #define PAD_USE_THIRD_BTN_AS_2BTNS
@@ -433,7 +431,7 @@ enum PadType {
 
 
 enum AutoFireRate {
-	AF_OFF = 0,
+	AF_VERY_SLOW = 0,
 	AF_SLOW,
 	AF_MEDIUM,
 	AF_QUICK,
@@ -441,10 +439,10 @@ enum AutoFireRate {
 };
 
 const byte autofireHitsPerSec[AF_MODES_NO] = {
-	0,  // Well, this is just ignored
-	3,
-	6,
-	9
+	5,
+	10,
+	15,
+	20
 };
 
 struct AutoFireButton {
@@ -456,9 +454,8 @@ PadType padType = PAD_NONE;
 
 VideoMode current_mode = VID_50HZ;
 
-AutoFireButton afStatusX = { AF_OFF, 0 };
-AutoFireButton afStatusY = { AF_OFF, 0 };
-AutoFireButton afStatusZ = { AF_OFF, 0 };
+AutoFireButton afStatusL = { AF_MEDIUM, 0 };
+AutoFireButton afStatusR = { AF_MEDIUM, 0 };
 
 boolean padUseAB = false;
 boolean shouldSaveUseABState = false;
@@ -668,7 +665,7 @@ void save_mode() {
 void save_use_ab() {
 	if (shouldSaveUseABState) {
 		EEPROM.update(PAD_AB_OFFSET, padUseAB ? 1 : 0);
-		blinkBuiltInLed(1);
+		//blinkBuiltInLed(1);
 		shouldSaveUseABState = false;
 	}
 }
@@ -676,7 +673,7 @@ void save_use_ab() {
 void save_swap_buttons() {
 	if (shouldSaveSwapButtonsState) {
 		EEPROM.update(SWAP_BTN_OFFSET, swapButtons ? 1 : 0);
-		blinkBuiltInLed(1);
+		//blinkBuiltInLed(1);
 		shouldSaveSwapButtonsState = false;
 	}
 }
@@ -1035,9 +1032,7 @@ inline word read_md_pad() {
 
 	// We can read up, down, left, right, C & B
 	port = readPadPort();
-	pad_status = (pad_status & 0xFFC0)
-	             | (~port & 0x3F);
-	;
+	pad_status = (pad_status & 0xFFC0) | (~port & 0x3F);
 
 	// Bring select line low 1st time
 	setSelect(LOW);
@@ -1045,8 +1040,7 @@ inline word read_md_pad() {
 
 	// We can read Start & A
 	port = readPadPort();
-	pad_status = (pad_status & 0xFF3F)
-	             | ((~port & 0x30) << 2);
+	pad_status = (pad_status & 0xFF3F) | ((~port & 0x30) << 2);
 
 	if (padType == PAD_MD_6BTN) {
 		setSelect(HIGH);  // High again (1st time)
@@ -1151,36 +1145,20 @@ inline void write_sms_pad(byte pad_status) {
 	POREG_TRACES = ~pad_status & PDREG_TRACES_BITS;
 }
 
-boolean checkAutoFire(AutoFireButton& btn, boolean nowPressed) {
-	boolean ret = false;
+bool checkAutoFire(AutoFireButton& btn) 
+{
+	bool result = false;
+	unsigned long intv = 1000 / autofireHitsPerSec[btn.rate];  // ms between presses
 
-	if (btn.rate != AF_OFF && btn.rate < AF_MODES_NO) {
-		unsigned long intv = 1000 / autofireHitsPerSec[btn.rate];  // ms between presses
-
-		if (btn.pressStart != 0) {
-			// Button was pressed before
-			if (!nowPressed) {
-				// Just released
-				btn.pressStart = 0;
-			} else {
-				// Kept pressed
-				//~ smsPad |= ((millis () - btn.pressStart) / intv) % 2 == 0 ? SMS_BTN_B1 : 0x00;
-				ret = ((millis() - btn.pressStart) / intv) % 2 == 0;
-			}
-		} else {
-			// Button was NOT pressed before
-			if (nowPressed) {
-				// Just pressed
-				btn.pressStart = millis();
-			} else {
-				// Not pressed
-			}
-		}
+	if (btn.pressStart != 0) {
+		// Button was pressed before
+		result = ((millis() - btn.pressStart) / intv) % 2 == 0;
 	} else {
-		ret = nowPressed;
+		// Just pressed
+		btn.pressStart = millis();
 	}
 
-	return ret;
+	return result;
 }
 
 inline byte mdPadToSms(word mdPad) {
@@ -1190,58 +1168,77 @@ inline byte mdPadToSms(word mdPad) {
 	smsPad |= (mdPad & MD_BTN_DOWN) ? SMS_BTN_DOWN : 0x00;
 	smsPad |= (mdPad & MD_BTN_LEFT) ? SMS_BTN_LEFT : 0x00;
 	smsPad |= (mdPad & MD_BTN_RIGHT) ? SMS_BTN_RIGHT : 0x00;
+	
+	int btnL;
+	int btnR;
+	int btnLandR;
+	int btnAutoL;
+	int btnAutoR;
+	int btnAutoLandR;
 
-	if (padUseAB) {
-		/* Normally SMS buttons 1 and 2 are mapped to B and C on the MD pad. But we
-		 * can map them to A and B just as easily.
-		 */
-		if (swapButtons) {
-			smsPad |= (mdPad & MD_BTN_A) ? SMS_BTN_B1 : 0x00;
-			smsPad |= (mdPad & MD_BTN_B) ? SMS_BTN_B2 : 0x00;
-
-			// Handle autofire
-			smsPad |= checkAutoFire(afStatusX, mdPad & MD_BTN_X) ? SMS_BTN_B1 : 0x00;
-			smsPad |= checkAutoFire(afStatusY, mdPad & MD_BTN_Y) ? SMS_BTN_B2 : 0x00;
-		} else {
-			smsPad |= (mdPad & MD_BTN_A) ? SMS_BTN_B2 : 0x00;
-			smsPad |= (mdPad & MD_BTN_B) ? SMS_BTN_B1 : 0x00;
-
-			// Handle autofire
-			smsPad |= checkAutoFire(afStatusY, mdPad & MD_BTN_Y) ? SMS_BTN_B2 : 0x00;
-			smsPad |= checkAutoFire(afStatusX, mdPad & MD_BTN_X) ? SMS_BTN_B1 : 0x00;
+	if (padUseAB) 
+	{
+		if (swapButtons) 
+		{
+			btnL = MD_BTN_B;
+			btnR = MD_BTN_A;
+			btnLandR = MD_BTN_C;
+			btnAutoL = MD_BTN_Y;
+			btnAutoR = MD_BTN_X;
+			btnAutoLandR = MD_BTN_Z;
+		} 
+		else 
+		{
+			btnL = MD_BTN_A;
+			btnR = MD_BTN_B;
+			btnLandR = MD_BTN_C;
+			btnAutoL = MD_BTN_X;
+			btnAutoR = MD_BTN_Y;
+			btnAutoLandR = MD_BTN_Z;
 		}
-
-
-#ifdef PAD_USE_THIRD_BTN_AS_2BTNS
-		if ((mdPad & MD_BTN_C) || checkAutoFire(afStatusZ, mdPad & MD_BTN_Z)) {
-			smsPad |= SMS_BTN_B1 | SMS_BTN_B2;
+	} 
+	else 
+	{
+		if (swapButtons) 
+		{
+			btnL = MD_BTN_C;
+			btnR = MD_BTN_B;
+			btnLandR = MD_BTN_A;
+			btnAutoL = MD_BTN_Z;
+			btnAutoR = MD_BTN_Y;
+			btnAutoLandR = MD_BTN_X;
+		} 
+		else 
+		{
+			btnL = MD_BTN_B;
+			btnR = MD_BTN_C;
+			btnLandR = MD_BTN_A;
+			btnAutoL = MD_BTN_Y;
+			btnAutoR = MD_BTN_Z;
+			btnAutoLandR = MD_BTN_X;
 		}
-#endif
+	}
+	
+	bool autoFireL_pressed = mdPad & (btnAutoLandR | btnAutoL);
+	bool autoFireR_pressed = mdPad & (btnAutoLandR | btnAutoR);
 
-	} else {
-
-		if (swapButtons) {
-			smsPad |= (mdPad & MD_BTN_B) ? SMS_BTN_B2 : 0x00;
-			smsPad |= (mdPad & MD_BTN_C) ? SMS_BTN_B1 : 0x00;
-
-			// Handle autofire
-			smsPad |= checkAutoFire(afStatusY, mdPad & MD_BTN_Y) ? SMS_BTN_B2 : 0x00;
-			smsPad |= checkAutoFire(afStatusZ, mdPad & MD_BTN_Z) ? SMS_BTN_B1 : 0x00;
-		} else {
-			// B -> B1, C -> B2
-			smsPad |= (mdPad & MD_BTN_B) ? SMS_BTN_B1 : 0x00;
-			smsPad |= (mdPad & MD_BTN_C) ? SMS_BTN_B2 : 0x00;
-
-			// Handle autofire
-			smsPad |= checkAutoFire(afStatusY, mdPad & MD_BTN_Y) ? SMS_BTN_B1 : 0x00;
-			smsPad |= checkAutoFire(afStatusZ, mdPad & MD_BTN_Z) ? SMS_BTN_B2 : 0x00;
-		}
-
-#ifdef PAD_USE_THIRD_BTN_AS_2BTNS
-		if ((mdPad & MD_BTN_A) || checkAutoFire(afStatusX, mdPad & MD_BTN_X)) {
-			smsPad |= SMS_BTN_B1 | SMS_BTN_B2;
-		}
-#endif
+	if(!autoFireL_pressed)
+	{
+		smsPad |= (mdPad & (btnL | btnLandR)) ? SMS_BTN_B1 : 0x00;
+		afStatusL.pressStart = 0;
+	} 
+	else 
+	{
+		smsPad |= checkAutoFire(afStatusL) ? SMS_BTN_B1 : 0x00;
+	}
+	if(!autoFireR_pressed)
+	{
+		smsPad |= (mdPad & (btnR | btnLandR)) ? SMS_BTN_B2 : 0x00;
+		afStatusR.pressStart = 0;
+	} 
+	else 
+	{
+		smsPad |= checkAutoFire(afStatusR) ? SMS_BTN_B2 : 0x00;
 	}
 
 	return smsPad;
@@ -1320,16 +1317,16 @@ void handle_pad() {
 							debugln(F("Disable swap button combo detected"));
 							setSwapButtons(false);
 							last_combo_time = millis();
+						} else if ((pad_status & COMBO_AUTOFIRE_X) == COMBO_AUTOFIRE_X) {
+							cycleAutoFireFromBtn(MD_BTN_X);
+							last_combo_time = millis();
+						} else if ((pad_status & COMBO_AUTOFIRE_Y) == COMBO_AUTOFIRE_Y) {
+							cycleAutoFireFromBtn(MD_BTN_Y);
+							last_combo_time = millis();
+						} else if ((pad_status & COMBO_AUTOFIRE_Z) == COMBO_AUTOFIRE_Z) {
+							cycleAutoFireFromBtn(MD_BTN_Z);
+							last_combo_time = millis();
 						}
-					} else if ((pad_status & COMBO_AUTOFIRE_X) == COMBO_AUTOFIRE_X) {
-						cycleAutoFire(afStatusX);
-						last_combo_time = millis();
-					} else if ((pad_status & COMBO_AUTOFIRE_Y) == COMBO_AUTOFIRE_Y) {
-						cycleAutoFire(afStatusY);
-						last_combo_time = millis();
-					} else if ((pad_status & COMBO_AUTOFIRE_Z) == COMBO_AUTOFIRE_Z) {
-						cycleAutoFire(afStatusZ);
-						last_combo_time = millis();
 					}
 				}
 
@@ -1339,6 +1336,76 @@ void handle_pad() {
 
 				break;
 			}
+	}
+}
+
+void cycleAutoFireFromBtn(MdButton button)
+{
+	if (padUseAB) 
+	{
+		if (swapButtons) 
+		{
+			switch(button){
+				case MD_BTN_X:
+				cycleAutoFire(afStatusR);
+				return;
+				case MD_BTN_Y:
+				cycleAutoFire(afStatusL);
+				return;
+				case MD_BTN_Z:
+				cycleAutoFire(afStatusL);
+				cycleAutoFire(afStatusR);
+				return;
+			}
+		} 
+		else 
+		{
+			switch(button){
+				case MD_BTN_X:
+				cycleAutoFire(afStatusL);
+				return;
+				case MD_BTN_Y:
+				cycleAutoFire(afStatusR);
+				return;
+				case MD_BTN_Z:
+				cycleAutoFire(afStatusL);
+				cycleAutoFire(afStatusR);
+				return;
+			}
+		}
+	} 
+	else 
+	{
+		if (swapButtons) 
+		{
+			switch(button){
+				case MD_BTN_X:
+				cycleAutoFire(afStatusL);
+				cycleAutoFire(afStatusR);
+				return;
+				case MD_BTN_Y:
+				cycleAutoFire(afStatusR);
+				return;
+				case MD_BTN_Z:
+				cycleAutoFire(afStatusL);
+				return;
+			}
+		} 
+		else 
+		{
+			switch(button){
+				case MD_BTN_X:
+				cycleAutoFire(afStatusL);
+				cycleAutoFire(afStatusR);
+				return;
+				case MD_BTN_Y:
+				cycleAutoFire(afStatusL);
+				return;
+				case MD_BTN_Z:
+				cycleAutoFire(afStatusR);
+				return;
+			}
+		}
 	}
 }
 
