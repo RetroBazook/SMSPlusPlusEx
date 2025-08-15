@@ -57,15 +57,24 @@ This gives enough time for even the slowest dongles to sync before the check.
   Enable Japanese FM Sound and reset: Start + Right + A + B + C
   Enable PSG Sound and reset: Start + Down + A + B + C
 
-  b) AB / BC Mode Selection (BC is default)
-  Use BC: Start + B + Right
-  Use AB: Start + B + Left
+  b) Remap MD buttons (6 buttons mode)
+  Use BC: Start + X + Y + Z
+
+  ℹ️ After entering remap mode press keys you want to map in order :
+	. Btn 1
+	. Btn 2
+	. Btn 1 + Btn 2
+	. Btn 1 autofire
+	. Btn 2 autofire
+	. Btn 1 autofire + Btn 2 autofire
   
-  c) Button Swap (BC ⇄ CB or AB ⇄ BA)
-  Swap ON: Start + B + Up
-  Swap OFF: Start + B + Down
+  c) Remap MD buttons (3 buttons mode)
+  Swap ON: Start + Up + A + B + C
   
-  ℹ️ The third button remains a combo of the other two.
+  ℹ️ After entering remap mode press keys you want to map in order :
+	. Btn 1
+	. Btn 2
+	. Btn 1 + Btn 2
 
 4) Updated Old Combos
 
