@@ -294,6 +294,7 @@ enum SmsButton {
 };
 
 static int remapIndex = -1;
+static bool remap3btnMod = false;
 
 /* Button combo that enables the other combos
  *
@@ -303,6 +304,7 @@ static int remapIndex = -1;
 #define COMBO_TRIGGER MD_BTN_START
 
 #define COMBO_REMAP (MD_BTN_X | MD_BTN_Y | MD_BTN_Z)
+#define COMBO_REMAP_3BTN (MD_BTN_UP | MD_BTN_A | MD_BTN_B | MD_BTN_C)
 
 /* Button combos to perform other actions. These are to be considered in
  * addition to TRIGGER_COMBO.
@@ -453,6 +455,10 @@ VideoMode current_mode = VID_50HZ;
 AutoFireButton afStatusL = { AF_MEDIUM, 0 };
 AutoFireButton afStatusR = { AF_MEDIUM, 0 };
 
+enum BtnNumber
+{
+  BTN_NB_A = 0, BTN_NB_B, BTN_NB_C, BTN_NB_X, BTN_NB_Y, BTN_NB_Z
+};
 
 MdButton buttonsMap[] = {
 	MD_BTN_B,
@@ -472,7 +478,6 @@ MdButton& btnAutoLandR = buttonsMap[5];
 
 const int BTN_MAP_SIZE = sizeof(buttonsMap) / sizeof(buttonsMap[0]);
 
-bool shouldSaveRemap = false;
 
 bool startPreviouslyPressed = false;
 
@@ -656,62 +661,61 @@ void save_mode() {
 }
 
 void save_remap() {
-	if (shouldSaveRemap) {
-		for (int i = 0; i < BTN_MAP_SIZE; i++) {
-				uint16_t val = (uint16_t)buttonsMap[i];
-				EEPROM.update(REMAP_OFFSET + i * 2, val & 0xFF);        // low byte
-				EEPROM.update(REMAP_OFFSET + i * 2 + 1, val >> 8);      // high byte
-		}
-		shouldSaveRemap = false;
+	for (int i = 0; i < BTN_MAP_SIZE; i++) {
+		EEPROM.update(REMAP_OFFSET + i, (uint8_t)getCorrespondingKeyNb(buttonsMap[i]));
 	}
 }
 
-inline void loadMapping() 
-{
-    bool corrupted = false;
-
-    // Default mapping
-    const MdButton defaultMap[BTN_MAP_SIZE] = {
-        MD_BTN_B, MD_BTN_C, MD_BTN_A,
-        MD_BTN_Y, MD_BTN_Z, MD_BTN_X
-    };
-
-    for (int i = 0; i < BTN_MAP_SIZE; i++) {
-        uint8_t low = EEPROM.read(REMAP_OFFSET + i * 2);
-        uint8_t high = EEPROM.read(REMAP_OFFSET + i * 2 + 1);
-
-        // If EEPROM is blank (0xFF 0xFF) → use default mapping
-        if (low == 0xFF && high == 0xFF) {
-            buttonsMap[i] = defaultMap[i];
-            corrupted = true;
-            continue;
-        }
-
-        uint16_t val = (uint16_t)low | ((uint16_t)high << 8);
-
-        // Check for duplicates in already loaded buttons
-        bool duplicate = false;
-        for (int j = 0; j < i; j++) {
-            if (buttonsMap[j] == (MdButton)val) {
-                duplicate = true;
-                break;
-            }
-        }
-
-        // If value is out of valid range or already mapped → use default
-        if (val > MD_BTN_Z || duplicate) {
-            buttonsMap[i] = defaultMap[i];
-            corrupted = true;
-        } else {
-            buttonsMap[i] = (MdButton)val;
-        }
+BtnNumber getCorrespondingKeyNb(MdButton mdBtn) {
+    switch (mdBtn) {
+        case MD_BTN_A: return BTN_NB_A;
+        case MD_BTN_B: return BTN_NB_B;
+        case MD_BTN_C: return BTN_NB_C;
+        case MD_BTN_X: return BTN_NB_X;
+        case MD_BTN_Y: return BTN_NB_Y;
+        case MD_BTN_Z: return BTN_NB_Z;
     }
+    return (BtnNumber)-1; // Valeur invalide
+}
 
-    // If any invalid, blank or duplicate values were found → request a save
-    if (corrupted) {
-        Serial.println(F("EEPROM mapping invalid, blank or duplicate → applying default mapping"));
-        shouldSaveRemap = true;
+MdButton getCorrespondingButton(BtnNumber btnNb) {
+    switch (btnNb) {
+        case BTN_NB_A: return MD_BTN_A;
+        case BTN_NB_B: return MD_BTN_B;
+        case BTN_NB_C: return MD_BTN_C;
+        case BTN_NB_X: return MD_BTN_X;
+        case BTN_NB_Y: return MD_BTN_Y;
+        case BTN_NB_Z: return MD_BTN_Z;
     }
+    return (MdButton)0; // Valeur invalide
+}
+
+inline void loadMapping() {
+
+	for (int i = 0; i < BTN_MAP_SIZE; i++) {
+			BtnNumber btnNb = (BtnNumber)EEPROM.read(REMAP_OFFSET + i);
+			MdButton mdBtn = getCorrespondingButton(btnNb);
+
+			if (mdBtn == 0) //If save corruped restore default mapping and save
+			{
+				MdButton defaultMap[BTN_MAP_SIZE] = {
+					MD_BTN_B,
+					MD_BTN_C,
+					MD_BTN_A,
+					MD_BTN_Y,
+					MD_BTN_Z,
+					MD_BTN_X
+				};
+
+				for (int i = 0; i < BTN_MAP_SIZE; i++) {
+					buttonsMap[i] = defaultMap[i];
+				}
+				save_remap();
+				return;
+			}
+
+			buttonsMap[i] = mdBtn;
+	}
 }
 
 void remapButton(int index, MdButton mdButton) {
@@ -913,7 +917,7 @@ void setup_pad() {
 static unsigned long previousMillis = 0;
 static bool ledState = HIGH;
 static int remainingToggles = 0;  // <0 : infini
-const unsigned long BLINK_DURATION = 400; // ms
+const unsigned long BLINK_DURATION = 250; // ms
 
 inline void blinkBuiltInLed(int nbBlink) {
 	for (int i = 0; i < (nbBlink * 2); i++) 
@@ -958,78 +962,96 @@ void startRemapButtons() {
 			buttonsMap[i] = (MdButton)0; // 0 means "not mapped"
 	}
 
-	remapIndex = 0;          // start from the first button
-	startBlinkAsync();      // start LED blinking to indicate remap mode
-	Serial.println("Remapping started...");
+	remapIndex = 0;
+	startBlinkAsync();
 }
 
-void updateRemapButtons() {
-    static uint32_t blockUntil = 0;
-    static uint16_t lastPadState = 0;
-    static bool firstStableRead = false;
-
-		if(remapIndex == -1) return;
-
-    // Ignore reads until debounce delay is over
-    if (millis() < blockUntil) {
-        return;
-    }
-
-    // Read masked pad state
-    word pad = read_md_pad();
-
-    // Only accept if exactly one bit is set
-    bool oneButton = (pad != 0) && ((pad & (pad - 1)) == 0);
-
-    if (oneButton) {
-        if (!firstStableRead) {
-            lastPadState = pad;    // Store first read
-            firstStableRead = true;
-            return;                // Wait for confirmation on next loop
-        } else {
-            if (pad != lastPadState) {
-                firstStableRead = false; // Not stable, reset
-                return;
-            }
-        }
-    } else {
-        firstStableRead = false; // Reset if not one button
-        return;
-    }
-
-    // Convert to MdButton
-    MdButton btn = convertOneKeyPadToMdButton(pad);
-
-    // Avoid duplicates
-    for (int i = 0; i < remapIndex; i++) {
-        if (buttonsMap[i] == btn) return;
-    }
-
-    // Assign button
-    if (remapIndex < BTN_MAP_SIZE) {
-        buttonsMap[remapIndex++] = btn;
-    }
-
-    // If mapping complete
-    if (remapIndex >= BTN_MAP_SIZE) {
-        shouldSaveRemap = true;
-        remapIndex = -1;
-    }
-
-    // Start debounce block period (300 ms)
-    blockUntil = millis() + 300;
+void startRemapButtons_3btn() {
+	remap3btnMod = true;
+	startRemapButtons();
 }
 
-MdButton convertOneKeyPadToMdButton(word pad) {
+MdButton getCompatibleKey(word pad, bool threebtnmod = false) {
     switch (pad) {
-        case MD_BTN_A: return MD_BTN_A;
-        case MD_BTN_B: return MD_BTN_B;
-        case MD_BTN_C: return MD_BTN_C;
-        case MD_BTN_X: return MD_BTN_X;
-        case MD_BTN_Y: return MD_BTN_Y;
-        case MD_BTN_Z: return MD_BTN_Z;
-        default:       return (MdButton)0xFFFF; // Invalid
+			case MD_BTN_A: return MD_BTN_A;
+			case MD_BTN_B: return MD_BTN_B;
+			case MD_BTN_C: return MD_BTN_C;
+			case MD_BTN_X: return threebtnmod ? (MdButton)0 : MD_BTN_X;
+			case MD_BTN_Y: return threebtnmod ? (MdButton)0 : MD_BTN_Y;
+			case MD_BTN_Z: return threebtnmod ? (MdButton)0 : MD_BTN_Z;
+			default:       return (MdButton)0; // Invalid
     }
+}
+
+void updateRemapButtons() 
+{
+	static uint32_t blockUntil = 0;
+
+	if (millis() < blockUntil) { return; }
+
+	MdButton newKeyPressed = getCompatibleKey(read_md_pad());
+
+	// Only accept if exactly one bit is set
+	if(newKeyPressed == (MdButton)0) { return; }
+
+	// Avoid duplicates
+	for (int i = 0; i < remapIndex; i++) 
+	{
+			if (buttonsMap[i] == newKeyPressed) return;
+	}
+
+	buttonsMap[remapIndex] = newKeyPressed;
+	remapIndex++;
+
+	// If mapping complete
+	if (remapIndex >= BTN_MAP_SIZE) {
+			save_remap();
+			stopBlinkAsync();
+			remapIndex = -1;
+			//asm volatile ("  jmp 0"); //Reset
+	} else {
+		// Start debounce block period (100 ms)
+		blockUntil = millis() + 100;
+	}
+}
+
+void updateRemapButtons_3btn() 
+{
+	static uint32_t blockUntil = 0;
+
+	if (millis() < blockUntil) { return; }
+
+	MdButton newKeyPressed = getCompatibleKey(read_md_pad(), true);
+
+	// Only accept if exactly one bit is set
+	if(newKeyPressed == (MdButton)0) { return; }
+
+	// Avoid duplicates
+	for (int i = 0; i < 3; i++) 
+	{
+			if (buttonsMap[i] == newKeyPressed) return;
+	}
+
+	buttonsMap[remapIndex] = newKeyPressed;
+	if(newKeyPressed == MD_BTN_A) {
+		buttonsMap[remapIndex + 3] = MD_BTN_X;
+	} else if(newKeyPressed == MD_BTN_B) {
+		buttonsMap[remapIndex + 3] = MD_BTN_Y;
+	} else if(newKeyPressed == MD_BTN_C) {
+		buttonsMap[remapIndex + 3] = MD_BTN_Z;
+	}
+	remapIndex++;
+
+	// If mapping complete
+	if (remapIndex >= 3) {
+			save_remap();
+			stopBlinkAsync();
+			remapIndex = -1;
+			remap3btnMod = false;
+	} else {
+		// Start debounce block period (100 ms)
+		blockUntil = millis() + 100;
+	}
 }
 
 inline void stopBlinkAsync() {
@@ -1399,11 +1421,15 @@ void handle_pad() {
 							setFmSoundSwitchStateAndReboot(PSG);
 						} else
 #endif
-						if ((pad_status & COMBO_REMAP) == COMBO_REMAP) {
+						if ((pad_status & COMBO_REMAP_3BTN) == COMBO_REMAP_3BTN) {
+							debugln(F("Remap combo detected"));
+							startRemapButtons_3btn();
+							last_combo_time = millis();
+						} else if ((pad_status & COMBO_REMAP) == COMBO_REMAP) {
 							debugln(F("Remap combo detected"));
 							startRemapButtons();
 							last_combo_time = millis();
-						}else if ((pad_status & COMBO_RESET) == COMBO_RESET) {
+						} else if ((pad_status & COMBO_RESET) == COMBO_RESET) {
 							debugln(F("Reset combo detected"));
 							reset_console();
 							last_combo_time = millis();
@@ -1533,10 +1559,19 @@ void loop() {
 		}
 	}
 
-	handle_reset_button();
-	handle_pad();
-	updateRemapButtons();
+	if (remapIndex == -1) //Check no remap is occuring
+	{
+		handle_reset_button();
+		handle_pad();
+		save_mode();
+	} else {
+		if (remap3btnMod) 
+		{
+			updateRemapButtons_3btn();
+		} else {
+			updateRemapButtons();
+		}
+	}
+
 	updateBlinkAsync();
-	save_mode();
-	save_remap();
 }
