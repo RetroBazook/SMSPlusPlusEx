@@ -1,13 +1,24 @@
+/*******************************************************************************
+ * This file is part of SMS++.
+ * Copyright (C) 2016 by SukkoPera <software@sukkology.net>
+ *
+ * SMS++ is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *******************************************************************************/
+
 #pragma once
+
 #include "Types.h"
 
-void setup_pad();
-void setup_traces();
-void setup_elec_switch_control();
-void check_gamepad();
-void setup_sms_pad();
-void setup_md_pad();
-word read_md_pad();
-byte read_sms_pad();
-void write_sms_pad(byte pad_status);
+void initializePadInput();
+void initializeOutputTraces();
+void initializeElectronicSwitch();
+
+void detectGamepad();
 PadType getPadType();
+
+word readMegaDrivePad();
+byte readMasterSystemPad();
+void writeMasterSystemPad(byte padStatus);

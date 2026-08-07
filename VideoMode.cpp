@@ -1,22 +1,88 @@
+/*******************************************************************************
+ * This file is part of SMS++.
+ * Copyright (C) 2016 by SukkoPera <software@sukkology.net>
+ *
+ * SMS++ is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *******************************************************************************/
+
 #include <Arduino.h>
 #include <EEPROM.h>
+
 #include "Config.h"
 #include "Debug.h"
 #include "VideoMode.h"
 
 namespace {
-VideoMode current_mode = VID_50HZ;
-unsigned long mode_last_changed_time = 0;
+VideoMode currentMode = VID_50HZ;
+unsigned long lastModeChangeAt = 0;
+
 #if defined(MODE_LED_R_PIN) || defined(MODE_LED_G_PIN)
-#define ENABLE_MODE_LED_DUAL
-const byte mode_led_colors[][VID_MODES_NO] = {
+constexpr byte kModeLedColors[][2] = {
     MODE_LED_50HZ_COLOR,
-    MODE_LED_60HZ_COLOR
+    MODE_LED_60HZ_COLOR,
 };
+#endif
+
+void updateModeLeds() {
+#if defined(MODE_LED_R_PIN) || defined(MODE_LED_G_PIN)
+    const byte* colors = kModeLedColors[currentMode];
+
+#ifdef MODE_LED_R_PIN
+    byte red = colors[0];
+#ifdef MODE_LED_COMMON_ANODE
+    red = 255 - red;
+#endif
+    analogWrite(MODE_LED_R_PIN, red);
+#endif
+
+#ifdef MODE_LED_G_PIN
+    byte green = colors[1];
+#ifdef MODE_LED_COMMON_ANODE
+    green = 255 - green;
+#endif
+    digitalWrite(MODE_LED_G_PIN, green);
+#endif
+#endif
+
+#ifdef MODE_LED_SINGLE_PIN
+    // Must remain shorter than LONGPRESS_LEN in the worst case.
+    for (uint8_t i = 0; i < static_cast<uint8_t>(currentMode) + 1U; ++i) {
+        digitalWrite(MODE_LED_SINGLE_PIN, LOW);
+        delay(40);
+        digitalWrite(MODE_LED_SINGLE_PIN, HIGH);
+        delay(80);
+    }
 #endif
 }
 
-void setupVideoMode() {
+void blinkModeSaved() {
+#if defined(MODE_LED_R_PIN) || defined(MODE_LED_G_PIN)
+    byte off = 0;
+#ifdef MODE_LED_COMMON_ANODE
+    off = 255 - off;
+#endif
+#ifdef MODE_LED_R_PIN
+    digitalWrite(MODE_LED_R_PIN, off);
+#endif
+#ifdef MODE_LED_G_PIN
+    digitalWrite(MODE_LED_G_PIN, off);
+#endif
+    delay(200);
+    updateModeLeds();
+#endif
+
+#ifdef MODE_LED_SINGLE_PIN
+    digitalWrite(MODE_LED_SINGLE_PIN, LOW);
+    delay(500);
+    digitalWrite(MODE_LED_SINGLE_PIN, HIGH);
+#endif
+}
+}  // namespace
+
+void initializeVideoMode() {
 #ifdef MODE_LED_R_PIN
     pinMode(MODE_LED_R_PIN, OUTPUT);
 #endif
@@ -28,128 +94,66 @@ void setupVideoMode() {
 #endif
 
     pinMode(VIDEOMODE_PIN, OUTPUT);
-    current_mode = VID_50HZ;
+    currentMode = VID_50HZ;
+
 #ifdef MODE_ROM_OFFSET
-    byte tmp = EEPROM.read(MODE_ROM_OFFSET);
+    const byte storedMode = EEPROM.read(MODE_ROM_OFFSET);
     debug(F("Loaded video mode from EEPROM: "));
-    debugln(tmp);
-    if (tmp < VID_MODES_NO) {
-        current_mode = static_cast<VideoMode>(tmp);
+    debugln(storedMode);
+    if (storedMode < VID_MODES_NO) {
+        currentMode = static_cast<VideoMode>(storedMode);
     }
 #endif
-    set_mode(current_mode);
-    mode_last_changed_time = 0;
+
+    setVideoMode(currentMode);
+    lastModeChangeAt = 0;  // Do not save the value we just loaded.
 }
 
-VideoMode getCurrentVideoMode() { return current_mode; }
-
-void update_mode_leds() {
-#ifdef ENABLE_MODE_LED_DUAL
-	const byte* colors = mode_led_colors[current_mode];
-	byte c;
-
-#ifdef MODE_LED_R_PIN
-	c = colors[0];
-#ifdef MODE_LED_COMMON_ANODE
-	c = 255 - c;
-#endif
-	analogWrite(MODE_LED_R_PIN, c);
-#endif
-
-#ifdef MODE_LED_G_PIN
-	c = colors[1];
-#ifdef MODE_LED_COMMON_ANODE
-	c = 255 - c;
-#endif
-	digitalWrite(MODE_LED_G_PIN, c);
-#endif
-
-#endif  // ENABLE_MODE_LED_DUAL
-
-#ifdef MODE_LED_SINGLE_PIN
-	// WARNING: This loop must be reasonably shorter than LONGPRESS_LEN in the worst case!
-	for (int i = 0; i < current_mode + 1; ++i) {
-		digitalWrite(MODE_LED_SINGLE_PIN, LOW);
-		delay(40);
-		digitalWrite(MODE_LED_SINGLE_PIN, HIGH);
-		delay(80);
-	}
-#endif
-}
-
-void save_mode() {
+void saveVideoModeIfNeeded() {
 #ifdef MODE_ROM_OFFSET
-	if (mode_last_changed_time > 0 && millis() - mode_last_changed_time >= MODE_SAVE_DELAY) {
-		debug(F("Saving video mode to EEPROM: "));
-		debugln(current_mode);
-		byte saved_mode = EEPROM.read(MODE_ROM_OFFSET);
-		if (current_mode != saved_mode) {
-			EEPROM.write(MODE_ROM_OFFSET, static_cast<byte>(current_mode));
-		} else {
-			debugln(F("Mode unchanged, not saving"));
-		}
-		mode_last_changed_time = 0;  // Don't save again
+    if (lastModeChangeAt == 0 || millis() - lastModeChangeAt < MODE_SAVE_DELAY) {
+        return;
+    }
 
-		// Blink led to tell the user that mode was saved
-#ifdef ENABLE_MODE_LED_DUAL
-		byte c = 0;
+    debug(F("Saving video mode to EEPROM: "));
+    debugln(currentMode);
 
-#ifdef MODE_LED_COMMON_ANODE
-		c = 255 - c;
+    const byte storedMode = EEPROM.read(MODE_ROM_OFFSET);
+    if (storedMode != static_cast<byte>(currentMode)) {
+        EEPROM.write(MODE_ROM_OFFSET, static_cast<byte>(currentMode));
+    } else {
+        debugln(F("Mode unchanged, not saving"));
+    }
+
+    lastModeChangeAt = 0;
+    blinkModeSaved();
 #endif
-
-#ifdef MODE_LED_R_PIN
-		digitalWrite(MODE_LED_R_PIN, c);
-#endif
-
-#ifdef MODE_LED_G_PIN
-		digitalWrite(MODE_LED_G_PIN, c);
-#endif
-
-		// Keep off for a bit
-		delay(200);
-
-		// Turn led back on
-		update_mode_leds();
-#endif  // ENABLE_MODE_LED_DUAL
-
-#ifdef MODE_LED_SINGLE_PIN
-		// Make one long flash
-		digitalWrite(MODE_LED_SINGLE_PIN, LOW);
-		delay(500);
-		digitalWrite(MODE_LED_SINGLE_PIN, HIGH);
-#endif
-	}
-#endif  // MODE_ROM_OFFSET
 }
 
-void set_mode(VideoMode m) {
-	switch (m) {
-		default:
-		case VID_50HZ:
-			digitalWrite(VIDEOMODE_PIN, HIGH);  // PAL 50Hz
-			break;
-		case VID_60HZ:
-			digitalWrite(VIDEOMODE_PIN, LOW);  // PAL 60Hz
-	}
+void setVideoMode(VideoMode mode) {
+    switch (mode) {
+        case VID_60HZ:
+            digitalWrite(VIDEOMODE_PIN, LOW);   // PAL 60 Hz
+            break;
+        case VID_50HZ:
+        default:
+            digitalWrite(VIDEOMODE_PIN, HIGH);  // PAL 50 Hz
+            break;
+    }
 
-	current_mode = m;
-	update_mode_leds();
-
-	mode_last_changed_time = millis();
+    currentMode = mode;
+    updateModeLeds();
+    lastModeChangeAt = millis();
 }
 
-void change_mode(int increment) {
-	// This also loops in [0, VID_MODES_NO) backwards
-	VideoMode new_mode = static_cast<VideoMode>((current_mode + increment + VID_MODES_NO) % VID_MODES_NO);
-	set_mode(new_mode);
+void nextVideoMode() {
+    setVideoMode(static_cast<VideoMode>((currentMode + 1) % VID_MODES_NO));
 }
 
-void next_mode() {
-	change_mode(+1);
+void previousVideoMode() {
+    setVideoMode(static_cast<VideoMode>((currentMode + VID_MODES_NO - 1) % VID_MODES_NO));
 }
 
-void prev_mode() {
-	change_mode(-1);
+VideoMode getCurrentVideoMode() {
+    return currentMode;
 }
-

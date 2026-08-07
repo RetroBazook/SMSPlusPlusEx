@@ -1,92 +1,120 @@
+/*******************************************************************************
+ * This file is part of SMS++.
+ * Copyright (C) 2016 by SukkoPera <software@sukkology.net>
+ *
+ * SMS++ is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *******************************************************************************/
+
 #include <Arduino.h>
+
+#include "AutoFire.h"
 #include "Config.h"
+#include "ConsoleControl.h"
 #include "Debug.h"
 #include "PadHandler.h"
 #include "PadProtocol.h"
-#include "ConsoleControl.h"
-#include "VideoMode.h"
 #include "Remapping.h"
-#include "AutoFire.h"
+#include "VideoMode.h"
 
-void handle_pad() {
-	static long last_combo_time = 0;
+namespace {
+unsigned long lastComboAt = 0;
 
-	switch (getPadType()) {
-		case PAD_SMS:
-			{
-				// Just relay data without much thinking
-				byte pad_status = read_sms_pad();
-				handle_pause_button(false);
-				write_sms_pad(pad_status);
-				break;
-			}
+bool comboPressed(word padStatus, word combo) {
+    return (padStatus & combo) == combo;
+}
 
-		case PAD_MD:
-		case PAD_MD_6BTN:
-			{
-				word pad_status = read_md_pad();
+void markComboHandled() {
+    lastComboAt = millis();
+}
 
-				// Handle pause
-				handle_pause_button((pad_status & MD_BTN_START) != 0);
+void handleSpecialCombos(word padStatus) {
+    if (millis() - lastComboAt <= IGNORE_COMBO_MS || !comboPressed(padStatus, COMBO_TRIGGER)) {
+        return;
+    }
+
+#ifdef FMSOUND_OUT_PIN
+    if (comboPressed(padStatus, COMBO_JAP_FM_SOUND)) {
+        debugln(F("Enable JAP FM Sound"));
+        switchFmSoundAndReset(JAP_FM);
+        return;
+    }
+    if (comboPressed(padStatus, COMBO_FM_SOUND)) {
+        debugln(F("Enable FM Sound"));
+        switchFmSoundAndReset(FM);
+        return;
+    }
+    if (comboPressed(padStatus, COMBO_PSG_SOUND)) {
+        debugln(F("Enable PSG Sound"));
+        switchFmSoundAndReset(PSG);
+        return;
+    }
+#endif
+
+    if (comboPressed(padStatus, COMBO_REMAP_3BTN)) {
+        debugln(F("Remap combo detected"));
+        beginThreeButtonRemap();
+        markComboHandled();
+    } else if (comboPressed(padStatus, COMBO_REMAP)) {
+        debugln(F("Remap combo detected"));
+        beginFullRemap();
+        markComboHandled();
+    } else if (comboPressed(padStatus, COMBO_RESET)) {
+        debugln(F("Reset combo detected"));
+        pulseReset();
+        markComboHandled();
+    } else if (comboPressed(padStatus, COMBO_50HZ)) {
+        debugln(F("50 Hz combo detected"));
+        setVideoMode(VID_50HZ);
+        markComboHandled();
+    } else if (comboPressed(padStatus, COMBO_60HZ)) {
+        debugln(F("60 Hz combo detected"));
+        setVideoMode(VID_60HZ);
+        markComboHandled();
+    } else if (comboPressed(padStatus, COMBO_TRIGGER_AUTOFIRE | getMappedAutoLeftButton())) {
+        cycleAutoFireLeft();
+        markComboHandled();
+    } else if (comboPressed(padStatus, COMBO_TRIGGER_AUTOFIRE | getMappedAutoRightButton())) {
+        cycleAutoFireRight();
+        markComboHandled();
+    } else if (comboPressed(padStatus, COMBO_TRIGGER_AUTOFIRE | getMappedAutoBothButton())) {
+        cycleAutoFireBoth();
+        markComboHandled();
+    }
+}
+
+void updateMasterSystemPad() {
+    const byte padStatus = readMasterSystemPad();
+    updatePauseButton(false);
+    writeMasterSystemPad(padStatus);
+}
+
+void updateMegaDrivePad() {
+    const word padStatus = readMegaDrivePad();
+    updatePauseButton((padStatus & MD_BTN_START) != 0);
 
 #ifdef PAD_LED_PIN
-				digitalWrite(PAD_LED_PIN, pad_status);
+    digitalWrite(PAD_LED_PIN, padStatus);
 #endif
-				//Handle combos
-				if (millis() - last_combo_time > IGNORE_COMBO_MS) {
-					// Look for special combos
-					if ((pad_status & COMBO_TRIGGER) == COMBO_TRIGGER) {
-						
-#ifdef FMSOUND_OUT_PIN
-						if ((pad_status & COMBO_JAP_FM_SOUND) == COMBO_JAP_FM_SOUND) {
-							debugln(F("Enable JAP FM Sound"));
-							setFmSoundSwitchStateAndReboot(JAP_FM);
-						} else if ((pad_status & COMBO_FM_SOUND) == COMBO_FM_SOUND) {
-							debugln(F("Enable FM Sound"));
-							setFmSoundSwitchStateAndReboot(FM);
-						} else if ((pad_status & COMBO_PSG_SOUND) == COMBO_PSG_SOUND) {
-							debugln(F("Enable PSG Sound"));
-							setFmSoundSwitchStateAndReboot(PSG);
-						} else
-#endif
-						if ((pad_status & COMBO_REMAP_3BTN) == COMBO_REMAP_3BTN) {
-							debugln(F("Remap combo detected"));
-							startRemapButtons_3btn();
-							last_combo_time = millis();
-						} else if ((pad_status & COMBO_REMAP) == COMBO_REMAP) {
-							debugln(F("Remap combo detected"));
-							startRemapButtons();
-							last_combo_time = millis();
-						} else if ((pad_status & COMBO_RESET) == COMBO_RESET) {
-							debugln(F("Reset combo detected"));
-							reset_console();
-							last_combo_time = millis();
-						} else if ((pad_status & COMBO_50HZ) == COMBO_50HZ) {
-							debugln(F("50 Hz combo detected"));
-							set_mode(VID_50HZ);
-							last_combo_time = millis();
-						} else if ((pad_status & COMBO_60HZ) == COMBO_60HZ) {
-							debugln(F("60 Hz combo detected"));
-							set_mode(VID_60HZ);
-							last_combo_time = millis();
-						} else if ((pad_status & (COMBO_TRIGGER_AUTOFIRE | getMappedAutoLeftButton())) == (COMBO_TRIGGER_AUTOFIRE | getMappedAutoLeftButton())) {
-							cycleAutoFireLeft();
-							last_combo_time = millis();
-						} else if ((pad_status & (COMBO_TRIGGER_AUTOFIRE | getMappedAutoRightButton())) == (COMBO_TRIGGER_AUTOFIRE | getMappedAutoRightButton())) {
-							cycleAutoFireRight();
-							last_combo_time = millis();
-						} else if ((pad_status & (COMBO_TRIGGER_AUTOFIRE | getMappedAutoBothButton())) == (COMBO_TRIGGER_AUTOFIRE | getMappedAutoBothButton())) {
-							cycleAutoFireBoth();
-							last_combo_time = millis();
-						}
-					}
-				}
 
-				// Send pad status to SMS
-				byte smsPad = mdPadToSms(pad_status);
-				write_sms_pad(smsPad);
+    handleSpecialCombos(padStatus);
+    writeMasterSystemPad(convertMegaDriveToMasterSystem(padStatus));
+}
+}  // namespace
 
-				break;
-			}
-	}
+void updatePad() {
+    switch (getPadType()) {
+        case PAD_SMS:
+            updateMasterSystemPad();
+            break;
+        case PAD_MD:
+        case PAD_MD_6BTN:
+            updateMegaDrivePad();
+            break;
+        case PAD_NONE:
+        default:
+            break;
+    }
 }

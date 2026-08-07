@@ -1,67 +1,88 @@
+/*******************************************************************************
+ * This file is part of SMS++.
+ * Copyright (C) 2016 by SukkoPera <software@sukkology.net>
+ *
+ * SMS++ is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *******************************************************************************/
+
 #include <Arduino.h>
-#include "Types.h"
-#include "Remapping.h"
+
 #include "AutoFire.h"
+#include "Remapping.h"
+#include "Types.h"
 
 namespace {
-const byte autofireHitsPerSec[AF_MODES_NO] = {5, 10, 15, 20};
-AutoFireButton afStatusL = {AF_MEDIUM, 0};
-AutoFireButton afStatusR = {AF_MEDIUM, 0};
+struct AutoFireState {
+    AutoFireRate rate = AF_MEDIUM;
+    unsigned long pressStartedAt = 0;
+};
+
+constexpr byte kHitsPerSecond[AF_MODES_NO] = {5, 10, 15, 20};
+AutoFireState leftAutoFire;
+AutoFireState rightAutoFire;
+
+bool isAutoFireOn(AutoFireState& state) {
+    const unsigned long intervalMs = 1000UL / kHitsPerSecond[state.rate];
+
+    if (state.pressStartedAt == 0) {
+        state.pressStartedAt = millis();
+        return false;  // Preserves original first-call behaviour.
+    }
+
+    return ((millis() - state.pressStartedAt) / intervalMs) % 2U == 0;
 }
 
-bool checkAutoFire(AutoFireButton& btn) 
-{
-	bool result = false;
-	unsigned long intv = 1000 / autofireHitsPerSec[btn.rate];  // ms between presses
+void cycleRate(AutoFireState& state) {
+    state.rate = static_cast<AutoFireRate>((state.rate + 1) % AF_MODES_NO);
+}
+}  // namespace
 
-	if (btn.pressStart != 0) {
-		// Button was pressed before
-		result = ((millis() - btn.pressStart) / intv) % 2 == 0;
-	} else {
-		// Just pressed
-		btn.pressStart = millis();
-	}
+byte convertMegaDriveToMasterSystem(word megaDrivePad) {
+    byte smsPad = 0;
 
-	return result;
+    if (megaDrivePad & MD_BTN_UP)    smsPad |= SMS_BTN_UP;
+    if (megaDrivePad & MD_BTN_DOWN)  smsPad |= SMS_BTN_DOWN;
+    if (megaDrivePad & MD_BTN_LEFT)  smsPad |= SMS_BTN_LEFT;
+    if (megaDrivePad & MD_BTN_RIGHT) smsPad |= SMS_BTN_RIGHT;
+
+    const bool autoLeftPressed =
+        megaDrivePad & (getMappedAutoBothButton() | getMappedAutoLeftButton());
+    const bool autoRightPressed =
+        megaDrivePad & (getMappedAutoBothButton() | getMappedAutoRightButton());
+
+    if (autoLeftPressed) {
+        if (isAutoFireOn(leftAutoFire)) smsPad |= SMS_BTN_B1;
+    } else {
+        if (megaDrivePad & (getMappedLeftButton() | getMappedBothButton())) {
+            smsPad |= SMS_BTN_B1;
+        }
+        leftAutoFire.pressStartedAt = 0;
+    }
+
+    if (autoRightPressed) {
+        if (isAutoFireOn(rightAutoFire)) smsPad |= SMS_BTN_B2;
+    } else {
+        if (megaDrivePad & (getMappedRightButton() | getMappedBothButton())) {
+            smsPad |= SMS_BTN_B2;
+        }
+        rightAutoFire.pressStartedAt = 0;
+    }
+
+    return smsPad;
 }
 
-byte mdPadToSms(word mdPad) {
-	byte smsPad = 0x00;
-
-	smsPad |= (mdPad & MD_BTN_UP) ? SMS_BTN_UP : 0x00;
-	smsPad |= (mdPad & MD_BTN_DOWN) ? SMS_BTN_DOWN : 0x00;
-	smsPad |= (mdPad & MD_BTN_LEFT) ? SMS_BTN_LEFT : 0x00;
-	smsPad |= (mdPad & MD_BTN_RIGHT) ? SMS_BTN_RIGHT : 0x00;
-	
-	bool autoFireL_pressed = mdPad & (getMappedAutoBothButton() | getMappedAutoLeftButton());
-	bool autoFireR_pressed = mdPad & (getMappedAutoBothButton() | getMappedAutoRightButton());
-
-	if(!autoFireL_pressed)
-	{
-		smsPad |= (mdPad & (getMappedLeftButton() | getMappedBothButton())) ? SMS_BTN_B1 : 0x00;
-		afStatusL.pressStart = 0;
-	} 
-	else 
-	{
-		smsPad |= checkAutoFire(afStatusL) ? SMS_BTN_B1 : 0x00;
-	}
-	if(!autoFireR_pressed)
-	{
-		smsPad |= (mdPad & (getMappedRightButton() | getMappedBothButton())) ? SMS_BTN_B2 : 0x00;
-		afStatusR.pressStart = 0;
-	} 
-	else 
-	{
-		smsPad |= checkAutoFire(afStatusR) ? SMS_BTN_B2 : 0x00;
-	}
-
-	return smsPad;
+void cycleAutoFireLeft() {
+    cycleRate(leftAutoFire);
 }
 
-void cycleAutoFire(AutoFireButton& btn) {
-	btn.rate = static_cast<AutoFireRate>((btn.rate + 1) % AF_MODES_NO);
+void cycleAutoFireRight() {
+    cycleRate(rightAutoFire);
 }
 
-void cycleAutoFireLeft() { cycleAutoFire(afStatusL); }
-void cycleAutoFireRight() { cycleAutoFire(afStatusR); }
-void cycleAutoFireBoth() { cycleAutoFire(afStatusL); cycleAutoFire(afStatusR); }
+void cycleAutoFireBoth() {
+    cycleRate(leftAutoFire);
+    cycleRate(rightAutoFire);
+}

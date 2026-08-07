@@ -1,19 +1,22 @@
-# SMSPlusPlusEx – refactor C++
+# SMSPlusPlusEx – modernized C++ layout
 
-Cette version remplace le découpage multi-`.ino` par de vrais modules `.h/.cpp`.
+This version reorganizes the original monolithic Arduino sketch into small C++ modules while preserving the original runtime behaviour and AVR register-level pad timing.
 
-## Organisation
-- `SMSPlusPlusEx.ino` : uniquement `setup()` / `loop()` et orchestration.
-- `Config.h` : sélection de plateforme, pins, combos et constantes de configuration.
-- `Types.h` : enums/types partagés.
-- `ConsoleControl.*` : reset, pause, sélection FM/PSG.
-- `VideoMode.*` : 50/60 Hz, LEDs et persistance EEPROM.
-- `PadProtocol.*` : détection et protocole SMS / Mega Drive 3/6 boutons.
-- `Remapping.*` : mapping EEPROM, mode remap et feedback LED.
-- `AutoFire.*` : conversion MD→SMS et autofire.
-- `PadHandler.*` : traitement du pad et combos.
+## Modules
 
-## Encapsulation
-Les états internes `padType`, `current_mode`, `buttonsMap`, `remapIndex`, `remap3btnMod`, et les états d'autofire sont maintenant privés de leur module et accessibles via une petite API.
+- `SMSPlusPlusEx.ino`: Arduino entry points and high-level orchestration only.
+- `Config.h`: board pinout, compile-time options and user-tunable settings.
+- `Types.h`: shared enums and button bitmasks.
+- `ConsoleControl.*`: reset, pause, TH detection and FM switch.
+- `VideoMode.*`: 50/60 Hz state, LEDs and EEPROM persistence.
+- `PadProtocol.*`: SMS/MD detection, low-level protocol reads and SMS output.
+- `Remapping.*`: mapping persistence and remap UI state.
+- `AutoFire.*`: MD-to-SMS conversion and autofire state.
+- `PadHandler.*`: high-level pad processing and special combos.
+- `Debug.h`: debug macros.
 
-L'objectif de cette passe est de conserver le comportement fonctionnel du code fourni tout en supprimant la dépendance à la concaténation automatique de plusieurs fichiers `.ino`.
+## Refactor policy
+
+The hardware protocol, delays, EEPROM offsets and controller combos are intentionally preserved. Internal helpers are file-local (`namespace { ... }`) and public APIs use consistent descriptive names.
+
+One suspicious legacy expression in reset long-press handling (`now % pressedAt`) is intentionally retained to avoid an implicit behaviour change; it is marked in source for a separate bug-fix pass.
