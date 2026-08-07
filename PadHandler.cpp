@@ -15,16 +15,25 @@
 #include "PadController.h"
 #include "PadHandler.h"
 #include "RemappingManager.h"
+#include "FirmwareConfig.h"
 
 void PadHandler::updateMasterSystemPad() {
     const uint8_t padStatus = pad_.readMasterSystemPad();
+
+#if SMSPP_PLAYER == 1
+    // Also services the physical Pause input on the Player 1 board.
     console_.updatePauseButton(false);
+#endif
+
     pad_.writeMasterSystemPad(padStatus);
 }
 
 void PadHandler::updateMegaDrivePad() {
     const uint16_t padStatus = pad_.readMegaDrivePad();
+
+#if SMSPP_PLAYER == 1
     console_.updatePauseButton((padStatus & MD_BTN_START) != 0);
+#endif
 
 #ifdef PAD_LED_PIN
     digitalWrite(PAD_LED_PIN, padStatus);

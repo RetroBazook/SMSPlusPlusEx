@@ -27,11 +27,7 @@ ConsoleController::ConsoleController(VideoModeManager& videoMode)
 
 #ifdef RESET_IN_PIN
 byte ConsoleController::readResetInput() {
-#ifdef ARDUINO_NANO
-    return analogRead(RESET_IN_PIN) > ANALOG_IN_THRESHOLD ? HIGH : LOW;
-#else
     return digitalRead(RESET_IN_PIN);
-#endif
 }
 #endif
 
@@ -40,11 +36,7 @@ byte ConsoleController::readPauseInput(bool gamepadStartPressed) {
     if (gamepadStartPressed) {
         return LOW;
     }
-#ifdef ARDUINO_NANO
-    return analogRead(PAUSE_IN_PIN) > ANALOG_IN_THRESHOLD ? HIGH : LOW;
-#else
     return digitalRead(PAUSE_IN_PIN);
-#endif
 }
 #endif
 
@@ -87,12 +79,12 @@ void ConsoleController::pulsePause() {
 }
 
 void ConsoleController::initializeInputs() {
-#if defined(PAUSE_IN_PIN) && !defined(ARDUINO_NANO)
+#ifdef PAUSE_IN_PIN
     pinMode(PAUSE_IN_PIN, INPUT_PULLUP);
 #endif
     releasePause();
 
-#if defined(RESET_IN_PIN) && !defined(ARDUINO_NANO)
+#ifdef RESET_IN_PIN
     pinMode(RESET_IN_PIN, INPUT_PULLUP);
 #endif
 }
@@ -147,7 +139,9 @@ void ConsoleController::updateResetButton() {
             break;
     }
 #else
+#if SMSPP_PLAYER == 1
 #warning "RESET button handling disabled"
+#endif
 #endif
 }
 
@@ -178,6 +172,8 @@ void ConsoleController::updatePauseButton(bool gamepadStartPressed) {
             break;
     }
 #else
+#if SMSPP_PLAYER == 1
 #warning "PAUSE button handling disabled"
+#endif
 #endif
 }

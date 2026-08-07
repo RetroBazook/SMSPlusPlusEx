@@ -65,23 +65,33 @@ void setup() {
 #endif
     debugln(F("Starting up..."));
 
-    // Keep the console reset until every I/O path is configured.
+#if SMSPP_PLAYER == 1
+    // P1 owns all console-wide control lines. P2 does not define D0..D5.
     console.holdReset();
+#endif
 
 #ifdef PAD_LED_PIN
     pinMode(PAD_LED_PIN, OUTPUT);
 #endif
 
+#if SMSPP_PLAYER == 1
     videoMode.begin();
+#endif
+
     remapping.begin();
     pad.begin();
-    console.initializeInputs();
 
-#ifdef FMSOUND_OUT_PIN
+#if SMSPP_PLAYER == 1
+    console.initializeInputs();
+#endif
+
+#if SMSPP_PLAYER == 1 && defined(FMSOUND_OUT_PIN)
     console.initializeFmSound();
 #endif
 
+#if SMSPP_PLAYER == 1
     console.releaseReset();
+#endif
 }
 
 void loop() {
@@ -92,9 +102,15 @@ void loop() {
     if (remapping.isActive()) {
         remapping.update();
     } else {
+#if SMSPP_PLAYER == 1
         console.updateResetButton();
+#endif
+
         padHandler.update();
+
+#if SMSPP_PLAYER == 1
         videoMode.saveIfNeeded();
+#endif
     }
 
     statusLed.update();

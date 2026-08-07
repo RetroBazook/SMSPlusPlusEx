@@ -89,7 +89,9 @@ void VideoModeManager::begin() {
     pinMode(MODE_LED_SINGLE_PIN, OUTPUT);
 #endif
 
+#ifdef VIDEOMODE_PIN
     pinMode(VIDEOMODE_PIN, OUTPUT);
+#endif
     currentMode_ = VID_50HZ;
 
     const byte storedMode = EEPROM.read(FirmwareConfig::EepromAddress::VideoMode);
@@ -123,11 +125,13 @@ void VideoModeManager::saveIfNeeded() {
 }
 
 void VideoModeManager::set(VideoMode mode) {
+#ifdef VIDEOMODE_PIN
     switch (mode) {
         case VID_60HZ: digitalWrite(VIDEOMODE_PIN, LOW); break;
         case VID_50HZ:
         default:       digitalWrite(VIDEOMODE_PIN, HIGH); break;
     }
+#endif
 
     currentMode_ = mode;
     updateLeds();

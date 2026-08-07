@@ -11,8 +11,8 @@
 #pragma once
 
 #include <Arduino.h>
-#include "BoardConfig.h"
 #include "FirmwareConfig.h"
+#include "BoardConfig.h"
 #include "Types.h"
 
 // Optional dual-color video-mode LED settings.

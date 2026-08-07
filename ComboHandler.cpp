@@ -24,6 +24,7 @@ void ComboHandler::update(uint16_t padStatus) {
         return;
     }
 
+#if SMSPP_PLAYER == 1
 #ifdef FMSOUND_OUT_PIN
     if (pressed(padStatus, Combo::JapaneseFmSound)) {
         debugln(F("Enable JAP FM Sound"));
@@ -41,9 +42,13 @@ void ComboHandler::update(uint16_t padStatus) {
         return;
     }
 #endif
+#endif
 
     const ButtonMapping& mapping = remap_.mapping();
 
+    // Remapping and autofire are local controller features and are available
+    // on both P1 and P2. Start is only used here as an internal combo modifier;
+    // P2 never forwards it to the console Pause line.
     if (pressed(padStatus, Combo::RemapThreeButton)) {
         debugln(F("Remap combo detected"));
         remap_.startThreeButtonRemap();
@@ -52,6 +57,7 @@ void ComboHandler::update(uint16_t padStatus) {
         debugln(F("Remap combo detected"));
         remap_.startFullRemap();
         handled();
+#if SMSPP_PLAYER == 1
     } else if (pressed(padStatus, Combo::Reset)) {
         debugln(F("Reset combo detected"));
         console_.pulseReset();
@@ -64,6 +70,7 @@ void ComboHandler::update(uint16_t padStatus) {
         debugln(F("60 Hz combo detected"));
         video_.set(VID_60HZ);
         handled();
+#endif
     } else if (pressed(padStatus, Combo::AutoFireTrigger | mapping.autoLeft())) {
         autoFire_.cycleLeft();
         handled();

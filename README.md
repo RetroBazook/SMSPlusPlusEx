@@ -1,98 +1,275 @@
 This is a fork from https://github.com/SukkoPera/SMSPlusPlus
 
-Link to the installation page : https://github.com/SukkoPera/SMSPlusPlus/wiki/Installation
+Link to the installation page: https://github.com/SukkoPera/SMSPlusPlus/wiki/Installation
+
+# SMSPlusPlusEx
 
 ## Additional Features in the EX Mod Version
 
+> ⚠️ The EX hardware has been tested with Arduino Nano boards.
+> Arduino Uno builds are supported by the firmware, but the current P1/P2 PCB wiring documented below is based on Arduino Nano sockets.
+
+## Player Profiles
+
+SMSPlusPlusEx now supports two compile-time hardware profiles:
+
+```cpp
+#define SMSPP_PLAYER 1
 ```
 
-⚠️ Works with an Arduino Nano. Untested with an Arduino Uno ⚠️
+or:
 
+```cpp
+#define SMSPP_PLAYER 2
+```
 
-1) Restored Light Phaser compatibility
+### Player 1
+
+Player 1 has access to all console-control features:
+
+- Start button -> Pause
+- In-game Reset
+- 50/60 Hz switching
+- PSG / FM / Japanese FM switching
+- Button remapping
+- Autofire
+
+### Player 2
+
+Player 2 only handles controller input features:
+
+- Normal SMS / Mega Drive pad input
+- Button remapping
+- Autofire
+
+Player 2 does **not** control:
+
+- Pause / Start line
+- Console Reset
+- 50/60 Hz switching
+- PSG / FM / Japanese FM switching
+
+On the Player 2 Nano, pins **D0 to D5 are unused by SMSPlusPlusEx**.
+
+---
+
+## Hardware / Arduino Nano Pinout
+
+### Player 1 Arduino Nano
+
+```text
+                               +-----+
+                  +------------| USB |------------+
+                  |            +-----+            |
+    P1_OUT_PIN9   | [X]D13/SCK        MISO/D12[X] | P1_OUT_PIN6
+                  | [ ]3.3V           MOSI/D11[X] | P1_OUT_PIN4
+                  | [ ]V.ref             SS/D10[X] | P1_OUT_PIN3
+     P1_IN_PIN1   | [X]A0                    D9[X] | P1_OUT_PIN2
+     P1_IN_PIN2   | [X]A1                    D8[X] | P1_OUT_PIN1
+     P1_IN_PIN3   | [X]A2                    D7[X] | P1_TH_4066_IN
+     P1_IN_PIN4   | [X]A3                    D6[X] | P1_EXT_TH
+     P1_IN_PIN6   | [X]A4/SDA                D5[X] | PAUSE_IN
+     P1_IN_PIN9   | [X]A5/SCL                D4[X] | OUT_PAUSE
+                  | [ ]A6                    D3[X] | OUT_RESET
+                  | [ ]A7                    D2[X] | VIDEO_MODE
+              +5V | [X]5V                   GND[X] | GND
+                  | [ ]RST                  RST[ ] |
+                  | [ ]GND   5V MOSI GND    TX1[X] | JFMS_4066_IN
+                  | [ ]Vin   [ ] [ ] [ ]    RX0[X] | FMS_4066_IN
+                  |          [ ] [ ] [ ]           |
+                  |          MISO SCK RST          |
+                  | NANO-V3                        |
+                  +--------------------------------+
+```
+
+Player 1 pin summary:
+
+| Nano pin | Function |
+|---|---|
+| D0 / RX | FMS_4066_IN |
+| D1 / TX | JFMS_4066_IN |
+| D2 | VIDEO_MODE |
+| D3 | OUT_RESET |
+| D4 | OUT_PAUSE |
+| D5 | PAUSE_IN |
+| D6 | P1_EXT_TH |
+| D7 | P1_TH_4066_IN |
+| D8 | P1_OUT_PIN1 |
+| D9 | P1_OUT_PIN2 |
+| D10 | P1_OUT_PIN3 |
+| D11 | P1_OUT_PIN4 |
+| D12 | P1_OUT_PIN6 |
+| D13 | P1_OUT_PIN9 |
+| A0 | P1_IN_PIN1 |
+| A1 | P1_IN_PIN2 |
+| A2 | P1_IN_PIN3 |
+| A3 | P1_IN_PIN4 |
+| A4 | P1_IN_PIN6 |
+| A5 | P1_IN_PIN9 |
+
+### Player 2 Arduino Nano
+
+```text
+                               +-----+
+                  +------------| USB |------------+
+                  |            +-----+            |
+    P2_OUT_PIN9   | [X]D13/SCK        MISO/D12[X] | P2_OUT_PIN6
+                  | [ ]3.3V           MOSI/D11[X] | P2_OUT_PIN4
+                  | [ ]V.ref             SS/D10[X] | P2_OUT_PIN3
+     P2_IN_PIN1   | [X]A0                    D9[X] | P2_OUT_PIN2
+     P2_IN_PIN2   | [X]A1                    D8[X] | P2_OUT_PIN1
+     P2_IN_PIN3   | [X]A2                    D7[X] | P2_TH_4066_IN
+     P2_IN_PIN4   | [X]A3                    D6[X] | P2_EXT_TH
+     P2_IN_PIN6   | [X]A4/SDA                D5[ ] | N/C
+     P2_IN_PIN9   | [X]A5/SCL                D4[ ] | N/C
+                  | [ ]A6                    D3[ ] | N/C
+                  | [ ]A7                    D2[ ] | N/C
+              +5V | [X]5V                   GND[X] | GND
+                  | [ ]RST                  RST[ ] |
+                  | [ ]GND   5V MOSI GND    TX1[ ] | N/C
+                  | [ ]Vin   [ ] [ ] [ ]    RX0[ ] | N/C
+                  |          [ ] [ ] [ ]           |
+                  |          MISO SCK RST          |
+                  | NANO-V3                        |
+                  +--------------------------------+
+```
+
+Player 2 pin summary:
+
+| Nano pin | Function |
+|---|---|
+| D0-D5 | Not used by SMSPlusPlusEx |
+| D6 | P2_EXT_TH |
+| D7 | P2_TH_4066_IN |
+| D8 | P2_OUT_PIN1 |
+| D9 | P2_OUT_PIN2 |
+| D10 | P2_OUT_PIN3 |
+| D11 | P2_OUT_PIN4 |
+| D12 | P2_OUT_PIN6 |
+| D13 | P2_OUT_PIN9 |
+| A0 | P2_IN_PIN1 |
+| A1 | P2_IN_PIN2 |
+| A2 | P2_IN_PIN3 |
+| A3 | P2_IN_PIN4 |
+| A4 | P2_IN_PIN6 |
+| A5 | P2_IN_PIN9 |
+
+---
+
+## 1) Restored Light Phaser Compatibility
 
 Light Phaser compatibility has been restored by adding an electronic switch using a 74HC4066 IC (tested and working).
 
-2) FM Sound mode control with etim FMSound installed
+The TH-related wiring remains:
 
-Adds sound mode control when an etim FMSound board is installed. 
+- Pad Port Trace 7 (towards the SMS I/O controller) is routed through the 74HC4066.
+- Arduino D7 controls the relevant 74HC4066 switch.
+- Pad Port Pin 7 remains connected to Arduino D6 and to the 74HC4066 input/output path.
+
+## 2) FM Sound Mode Control with etim FMSound Installed
+
+Adds sound mode control when an etim FMSound board is installed.
+
 The 74HC4066 IC is also required to control the FMSound board (tested on a French PAL M4jr model).
 
+Current Player 1 wiring:
+
+```text
                                                         74HC4066
                                                       _____________
                                                      |             |
                      Arduino Nano D6 =>       IN/OUT1| 1         14| VDD       <= 5V
-SMS IO Controller (Pad Port Trace 7) =>       OUT/IN1| 2         13| CONT 1    <= Arduino Nano D7
-                                             OUT/IN2 | 3         12| CONT 4    <= Arduino Nano TX1
+SMS IO Controller (Pad Port Trace 7) =>        OUT/IN1| 2         13| CONT 1    <= Arduino Nano D7
+                                             OUT/IN2 | 3         12| CONT 4
                                              IN/OUT2 | 4         11| IN/OUT4   <= JAP_FM FMSOUND (FMSound board)
-                                 GND =>       CONT2  | 5         10| OUT/IN4   <= GND FMSOUND (FMSound board)
-                     Arduino Nano D5 =>       CONT3  | 6          9| OUT/IN3   <= GND FMSOUND (FMSound board)
-                                 GND =>         VSS  | 7          8| IN/OUT3   <= FM FMSOUND (FMSound board)
+                                 GND =>       CONT2   | 5         10| OUT/IN4   <= GND FMSOUND (FMSound board)
+                     Arduino Nano D0 =>       CONT3   | 6          9| OUT/IN3   <= GND FMSOUND (FMSound board)
+                                 GND =>         VSS   | 7          8| IN/OUT3   <= FM FMSOUND (FMSound board)
                                                      |_____________|
 
-⚠️ Important:
-
-There are installation differences from the original mod:
-
-- Pad Port Trace 7 (to IO Controller IC) should no longer be connected to the Arduino. It must be connected to pin 2 of the 74HC4066.
-- Arduino D7 should be connected to 74HC4066 CONT1 (pin 13).
-- Pad Port Pin 7 remains connected to Arduino Nano D6, but is also connected to pin 1 of the 74HC4066.
-- Arduino D5 (FMSOUND_OUT_PIN) should be connected to 74HC4066 CONT3 (pin 6).
-- Arduino TX1 (JAP_FMSOUND_OUT_PIN) should be connected to 74HC4066 CONT4 (pin 11).
-
-For the etim FMSound board, the cables that were originally soldered to the 3-position switch must now be soldered to the 74HC4066 (see diagram above).
-
-
-2) Improved Bluetooth Receiver Compatibility
-
-Fully compatible with all tested Bluetooth dongles (8BitDo, Retro-Bit, and likely others).
-The gamepad type detection is no longer performed during Arduino setup.
-Instead, the system waits for a button press to determine whether it's a Master System or a Mega Drive controller.
-This gives enough time for even the slowest dongles to sync before the check.
-
-3) New Button Combos
-
-  a) Sound mode
-  Enable FM Sound and reset: Start + Left + A + B + C
-  Enable Japanese FM Sound and reset: Start + Right + A + B + C
-  Enable PSG Sound and reset: Start + Down + A + B + C
-
-  b) Remap MD buttons (6 buttons mode)
-  Use BC: Start + X + Y + Z
-
-  ℹ️ After entering remap mode, press the keys you want to map in the following order:
-	. Btn 1
-	. Btn 2
-	. Btn 1 + Btn 2
-	. Btn 1 autofire
-	. Btn 2 autofire
-	. Btn 1 autofire + Btn 2 autofire
-  
-  c) Remap MD buttons (3 buttons mode)
-  Swap ON: Start + Up + A + B + C
-  
-  ℹ️ After entering remap mode, press the keys you want to map in the following order:
-	. Btn 1
-	. Btn 2
-	. Btn 1 + Btn 2
-
-4) Updated Old Combos
-
-  a) In-Game Reset
-  Reset: Start + A + B + C
-  
-  b) Switch Video Mode
-  50Hz: Start + A + Left
-  60Hz: Start + A + Right
-
-5) Start Button Cycling Fixed
-
-Previously, holding down the "Start" button for too long would cause a loop of pause/unpause in the game.
-This behavior has been corrected — now, pressing "Start" only pauses/resumes once, even if held down.
-
+Arduino Nano D1 / TX -> control input used for Japanese FM selection.
 ```
 
-Original message :
+> ⚠️ Important
+
+There are installation differences from the original SMS++ mod:
+
+- Pad Port Trace 7 (to the SMS I/O Controller IC) should no longer be connected directly to the Arduino. It must be connected through the 74HC4066.
+- Arduino D7 is used for the TH / Light Phaser 74HC4066 control.
+- Pad Port Pin 7 remains connected to Arduino Nano D6.
+- Player 1 Arduino D0 is used for FM control.
+- Player 1 Arduino D1 / TX is used for Japanese FM control.
+- Player 2 does not use the FM switching circuitry.
+
+For the etim FMSound board, the cables that were originally soldered to the 3-position switch must now be routed through the 74HC4066.
+
+## 3) Improved Bluetooth Receiver Compatibility
+
+Fully compatible with all tested Bluetooth dongles (8BitDo, Retro-Bit, and likely others).
+
+The gamepad type detection is no longer performed during Arduino setup. Instead, the system waits for controller activity to determine whether it is a Master System or a Mega Drive controller.
+
+This gives slower Bluetooth dongles enough time to synchronize before controller detection.
+
+## 4) New Button Combos
+
+### a) Sound mode — Player 1 only
+
+- Enable FM Sound and reset: **Start + Left + A + B + C**
+- Enable Japanese FM Sound and reset: **Start + Right + A + B + C**
+- Enable PSG Sound and reset: **Start + Down + A + B + C**
+
+### b) Remap MD buttons — 6-button mode
+
+Enter remap mode:
+
+**Start + X + Y + Z**
+
+After entering remap mode, press the keys you want to map in this order:
+
+1. Button 1
+2. Button 2
+3. Button 1 + Button 2
+4. Button 1 autofire
+5. Button 2 autofire
+6. Button 1 autofire + Button 2 autofire
+
+### c) Remap MD buttons — 3-button mode
+
+Enter 3-button remap mode:
+
+**Start + Up + A + B + C**
+
+After entering remap mode, press the keys you want to map in this order:
+
+1. Button 1
+2. Button 2
+3. Button 1 + Button 2
+
+Remapping is available on both Player 1 and Player 2 firmware profiles.
+
+## 5) Updated Old Combos
+
+### a) In-Game Reset — Player 1 only
+
+**Start + A + B + C**
+
+### b) Switch Video Mode — Player 1 only
+
+- 50 Hz: **Start + A + Left**
+- 60 Hz: **Start + A + Right**
+
+## 6) Start Button Cycling Fixed
+
+Previously, holding down the Start button for too long could cause a loop of pause/unpause in the game.
+
+This behavior has been corrected: pressing Start now pauses/resumes only once, even if the button is held.
+
+On the Player 2 firmware profile, Start is never forwarded to the SMS Pause line. It remains available internally as a modifier for features such as remapping.
+
+---
+
+# Original Message
 
 ## SMS++
 
@@ -122,6 +299,5 @@ SMS++ has the following features:
 - Even though default settings are recommended, **everything can be customized** to taste.
 - Uses the popular **Arduino environment**, allowing for easy development, testing and modifications.
 - Last but not least, it is **Open Source and Free Software**!
-
 
 If you are interested in modding your console with SMS++, please head to the [wiki](https://github.com/SukkoPera/SMSPlusPlus/wiki). There you will find full instructions about what chip to buy, how to put SMS++ on it and how to install it, with a full wiring guide for a few different Master System models that were sold.

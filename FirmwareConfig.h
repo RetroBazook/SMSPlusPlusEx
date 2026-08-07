@@ -13,7 +13,42 @@
 #include <Arduino.h>
 #include "Types.h"
 
+// -----------------------------------------------------------------------------
+// Firmware instance / PCB role
+// -----------------------------------------------------------------------------
+// 1 = Player 1 board: owns console-wide lines (FM, 50/60 Hz, Reset and Pause).
+// 2 = Player 2 board: controller conversion only; D0..D5 remain untouched.
+//
+// This can also be overridden from the compiler with -DSMSPP_PLAYER=2.
+#ifndef SMSPP_PLAYER
+#define SMSPP_PLAYER 1
+#endif
+
+#if SMSPP_PLAYER != 1 && SMSPP_PLAYER != 2
+#error "SMSPP_PLAYER must be 1 (Player 1) or 2 (Player 2)"
+#endif
+
 namespace FirmwareConfig {
+
+enum class Player : uint8_t {
+    One = 1,
+    Two = 2
+};
+
+#if SMSPP_PLAYER == 1
+constexpr Player ActivePlayer = Player::One;
+#else
+constexpr Player ActivePlayer = Player::Two;
+#endif
+
+namespace Feature {
+constexpr bool ConsoleControls   = SMSPP_PLAYER == 1;
+constexpr bool GamepadStartPause = SMSPP_PLAYER == 1;
+constexpr bool ResetControl      = SMSPP_PLAYER == 1;
+constexpr bool VideoModeControl  = SMSPP_PLAYER == 1;
+constexpr bool FmSoundControl    = SMSPP_PLAYER == 1;
+}
+
 namespace Combo {
 constexpr uint16_t Trigger = MD_BTN_START;
 constexpr uint16_t Remap = MD_BTN_X | MD_BTN_Y | MD_BTN_Z;
@@ -43,4 +78,5 @@ constexpr int VideoMode = 42;
 constexpr int Remapping = 43;
 constexpr int FmMode = 45;
 }
-}
+
+}  // namespace FirmwareConfig
