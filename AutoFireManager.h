@@ -11,19 +11,27 @@
 #pragma once
 
 #include <Arduino.h>
+#include "Types.h"
 
-class PadHandler {
+class AutoFireManager {
 public:
-    void update();
+    byte convertToMasterSystem(word megaDrivePad);
+
+    void cycleLeft();
+    void cycleRight();
+    void cycleBoth();
 
 private:
-    unsigned long lastComboAt_ = 0;
+    struct ButtonState {
+        AutoFireRate rate = AF_MEDIUM;
+        unsigned long pressStartedAt = 0;
+    };
 
-    static bool comboPressed(word padStatus, word combo);
-    void markComboHandled();
-    void handleSpecialCombos(word padStatus);
-    static void updateMasterSystemPad();
-    void updateMegaDrivePad();
+    ButtonState left_;
+    ButtonState right_;
+
+    static bool isOn(ButtonState& state);
+    static void cycle(ButtonState& state);
 };
 
-extern PadHandler padHandler;
+extern AutoFireManager autoFireManager;

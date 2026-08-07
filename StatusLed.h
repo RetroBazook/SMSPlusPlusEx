@@ -12,18 +12,19 @@
 
 #include <Arduino.h>
 
-class PadHandler {
+class StatusLed {
 public:
+    void blinkBlocking(uint8_t blinkCount);
+    void startContinuousBlink();
+    void stopBlink();
     void update();
 
 private:
-    unsigned long lastComboAt_ = 0;
+    static constexpr unsigned long kBlinkDurationMs = 250UL;
 
-    static bool comboPressed(word padStatus, word combo);
-    void markComboHandled();
-    void handleSpecialCombos(word padStatus);
-    static void updateMasterSystemPad();
-    void updateMegaDrivePad();
+    unsigned long lastBlinkAt_ = 0;
+    bool ledState_ = HIGH;
+    int remainingToggles_ = 0;  // Negative means blink indefinitely.
 };
 
-extern PadHandler padHandler;
+extern StatusLed statusLed;

@@ -11,35 +11,36 @@
 #include <Arduino.h>
 
 #include "Config.h"
-#include "ConsoleControl.h"
+#include "ConsoleController.h"
 #include "Debug.h"
+#include "PadController.h"
 #include "PadHandler.h"
-#include "PadProtocol.h"
-#include "Remapping.h"
-#include "VideoMode.h"
+#include "RemappingManager.h"
+#include "StatusLed.h"
+#include "VideoModeManager.h"
 
 namespace {
-void indicateDetectedPad(PadType padType) {
-    switch (padType) {
-        case PAD_SMS:     blinkBuiltInLed(2); break;
-        case PAD_MD:      blinkBuiltInLed(3); break;
-        case PAD_MD_6BTN: blinkBuiltInLed(6); break;
+void indicateDetectedPad(PadType type) {
+    switch (type) {
+        case PAD_SMS:     statusLed.blinkBlocking(2); break;
+        case PAD_MD:      statusLed.blinkBlocking(3); break;
+        case PAD_MD_6BTN: statusLed.blinkBlocking(6); break;
         case PAD_NONE:
         default: break;
     }
 }
 
 bool ensureGamepadDetected() {
-    if (getPadType() != PAD_NONE) {
+    if (padController.isDetected()) {
         return true;
     }
 
-    detectGamepad();
-    if (getPadType() == PAD_NONE) {
+    padController.detect();
+    if (!padController.isDetected()) {
         return false;
     }
 
-    indicateDetectedPad(getPadType());
+    indicateDetectedPad(padController.type());
     return true;
 }
 }  // namespace
@@ -50,33 +51,23 @@ void setup() {
 #endif
     debugln(F("Starting up..."));
 
-    // Hold the console in reset until every I/O path is configured.
-    assertReset();
+    // Keep the console in reset until every I/O path is configured.
+    consoleController.holdReset();
 
 #ifdef PAD_LED_PIN
     pinMode(PAD_LED_PIN, OUTPUT);
 #endif
 
-    initializeVideoMode();
-    initializeMapping();
-    initializePadInput();
-    initializeOutputTraces();
-    initializeElectronicSwitch();
-
-#if defined(PAUSE_IN_PIN) && !defined(ARDUINO_NANO)
-    pinMode(PAUSE_IN_PIN, INPUT_PULLUP);
-#endif
-    releasePause();
-
-#if defined(RESET_IN_PIN) && !defined(ARDUINO_NANO)
-    pinMode(RESET_IN_PIN, INPUT_PULLUP);
-#endif
+    videoModeManager.begin();
+    remappingManager.begin();
+    padController.begin();
+    consoleController.initializeInputs();
 
 #ifdef FMSOUND_OUT_PIN
-    initializeFmSound();
+    consoleController.initializeFmSound();
 #endif
 
-    releaseReset();
+    consoleController.releaseReset();
 }
 
 void loop() {
@@ -84,13 +75,13 @@ void loop() {
         return;
     }
 
-    if (isRemapping()) {
-        updateRemapping();
+    if (remappingManager.isActive()) {
+        remappingManager.update();
     } else {
-        updateResetButton();
-        updatePad();
-        saveVideoModeIfNeeded();
+        consoleController.updateResetButton();
+        padHandler.update();
+        videoModeManager.saveIfNeeded();
     }
 
-    updateBlinkIndicator();
+    statusLed.update();
 }

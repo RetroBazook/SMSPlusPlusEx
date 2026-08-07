@@ -8,104 +8,100 @@
  * version.
  *******************************************************************************/
 
-#include <Arduino.h>
-
-#include "AutoFire.h"
+#include "AutoFireManager.h"
 #include "Config.h"
-#include "ConsoleControl.h"
+#include "ConsoleController.h"
 #include "Debug.h"
+#include "PadController.h"
 #include "PadHandler.h"
-#include "PadProtocol.h"
-#include "Remapping.h"
-#include "VideoMode.h"
+#include "RemappingManager.h"
+#include "VideoModeManager.h"
 
-namespace {
-unsigned long lastComboAt = 0;
+PadHandler padHandler;
 
-bool comboPressed(word padStatus, word combo) {
+bool PadHandler::comboPressed(word padStatus, word combo) {
     return (padStatus & combo) == combo;
 }
 
-void markComboHandled() {
-    lastComboAt = millis();
+void PadHandler::markComboHandled() {
+    lastComboAt_ = millis();
 }
 
-void handleSpecialCombos(word padStatus) {
-    if (millis() - lastComboAt <= IGNORE_COMBO_MS || !comboPressed(padStatus, COMBO_TRIGGER)) {
+void PadHandler::handleSpecialCombos(word padStatus) {
+    if (millis() - lastComboAt_ <= IGNORE_COMBO_MS || !comboPressed(padStatus, COMBO_TRIGGER)) {
         return;
     }
 
 #ifdef FMSOUND_OUT_PIN
     if (comboPressed(padStatus, COMBO_JAP_FM_SOUND)) {
         debugln(F("Enable JAP FM Sound"));
-        switchFmSoundAndReset(JAP_FM);
+        consoleController.switchFmSoundAndReset(JAP_FM);
         return;
     }
     if (comboPressed(padStatus, COMBO_FM_SOUND)) {
         debugln(F("Enable FM Sound"));
-        switchFmSoundAndReset(FM);
+        consoleController.switchFmSoundAndReset(FM);
         return;
     }
     if (comboPressed(padStatus, COMBO_PSG_SOUND)) {
         debugln(F("Enable PSG Sound"));
-        switchFmSoundAndReset(PSG);
+        consoleController.switchFmSoundAndReset(PSG);
         return;
     }
 #endif
 
     if (comboPressed(padStatus, COMBO_REMAP_3BTN)) {
         debugln(F("Remap combo detected"));
-        beginThreeButtonRemap();
+        remappingManager.startThreeButtonRemap();
         markComboHandled();
     } else if (comboPressed(padStatus, COMBO_REMAP)) {
         debugln(F("Remap combo detected"));
-        beginFullRemap();
+        remappingManager.startFullRemap();
         markComboHandled();
     } else if (comboPressed(padStatus, COMBO_RESET)) {
         debugln(F("Reset combo detected"));
-        pulseReset();
+        consoleController.pulseReset();
         markComboHandled();
     } else if (comboPressed(padStatus, COMBO_50HZ)) {
         debugln(F("50 Hz combo detected"));
-        setVideoMode(VID_50HZ);
+        videoModeManager.set(VID_50HZ);
         markComboHandled();
     } else if (comboPressed(padStatus, COMBO_60HZ)) {
         debugln(F("60 Hz combo detected"));
-        setVideoMode(VID_60HZ);
+        videoModeManager.set(VID_60HZ);
         markComboHandled();
-    } else if (comboPressed(padStatus, COMBO_TRIGGER_AUTOFIRE | getMappedAutoLeftButton())) {
-        cycleAutoFireLeft();
+    } else if (comboPressed(padStatus, COMBO_TRIGGER_AUTOFIRE | remappingManager.autoLeftButton())) {
+        autoFireManager.cycleLeft();
         markComboHandled();
-    } else if (comboPressed(padStatus, COMBO_TRIGGER_AUTOFIRE | getMappedAutoRightButton())) {
-        cycleAutoFireRight();
+    } else if (comboPressed(padStatus, COMBO_TRIGGER_AUTOFIRE | remappingManager.autoRightButton())) {
+        autoFireManager.cycleRight();
         markComboHandled();
-    } else if (comboPressed(padStatus, COMBO_TRIGGER_AUTOFIRE | getMappedAutoBothButton())) {
-        cycleAutoFireBoth();
+    } else if (comboPressed(padStatus, COMBO_TRIGGER_AUTOFIRE | remappingManager.autoBothButton())) {
+        autoFireManager.cycleBoth();
         markComboHandled();
     }
 }
 
-void updateMasterSystemPad() {
-    const byte padStatus = readMasterSystemPad();
-    updatePauseButton(false);
-    writeMasterSystemPad(padStatus);
+void PadHandler::updateMasterSystemPad() {
+    const byte padStatus = padController.readMasterSystemPad();
+    consoleController.updatePauseButton(false);
+    padController.writeMasterSystemPad(padStatus);
 }
 
-void updateMegaDrivePad() {
-    const word padStatus = readMegaDrivePad();
-    updatePauseButton((padStatus & MD_BTN_START) != 0);
+void PadHandler::updateMegaDrivePad() {
+    const word padStatus = padController.readMegaDrivePad();
+    consoleController.updatePauseButton((padStatus & MD_BTN_START) != 0);
 
 #ifdef PAD_LED_PIN
     digitalWrite(PAD_LED_PIN, padStatus);
 #endif
 
     handleSpecialCombos(padStatus);
-    writeMasterSystemPad(convertMegaDriveToMasterSystem(padStatus));
+    padController.writeMasterSystemPad(autoFireManager.convertToMasterSystem(padStatus));
 }
-}  // namespace
 
-void updatePad() {
-    switch (getPadType()) {
+void PadHandler::update() {
+    switch (padController.type()) {
         case PAD_SMS:
             updateMasterSystemPad();
             break;

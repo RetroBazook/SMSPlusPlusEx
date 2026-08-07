@@ -1,27 +1,25 @@
 # Modernization notes
 
-This pass focuses on readability and maintainability without intentionally changing the original SMSPlusPlusEx behaviour.
+This revision keeps the firmware statically allocated and AVR-friendly while making ownership explicit.
 
-## Main changes
+## Design rules
 
-- Consistent camelCase public API (`detectGamepad`, `readMegaDrivePad`, `setVideoMode`, etc.).
-- File-local helpers and state moved into anonymous namespaces.
-- Large functions split into intention-revealing helpers.
-- Duplicate remapping paths consolidated into one state machine.
-- `Config.h` split from hardware-specific `BoardConfig.h`.
-- Shared enums use explicit underlying integer widths.
-- Internal fixed values use `constexpr` where preprocessor feature flags are not required.
-- GPL attribution restored to source/header files touched by the refactor.
-- `SMSPlusPlusEx.ino` now contains only orchestration and Arduino `setup()`/`loop()`.
+- One stateful component class per `.cpp` file.
+- No inheritance, virtual methods, heap allocation, STL containers or exceptions.
+- AVR register aliases remain macros in `BoardConfig.h` for clarity and timing-sensitive access.
+- Shared bit-mask enums remain unscoped because the firmware intentionally uses bitwise operations on them.
+- `SMSPlusPlusEx.ino` only coordinates startup and the main loop.
 
-## Behaviour intentionally preserved
+## Stateful components
 
-- AVR register-level I/O and MD 6-button pulse timings.
-- SMS / MD / MD 6-button / Light Phaser detection logic.
-- EEPROM offsets 42, 43 and 45.
-- Controller combos and autofire rates.
-- Reset/Pause pulse timing and video-mode save delay.
+- `ConsoleController`: reset, pause, physical buttons, TH and FM switch.
+- `VideoModeManager`: video mode state and EEPROM persistence.
+- `PadController`: controller detection and wire protocol.
+- `RemappingManager`: mapping state and EEPROM persistence.
+- `AutoFireManager`: autofire timers/rates and MD-to-SMS conversion.
+- `StatusLed`: built-in LED animation state.
+- `PadHandler`: high-level pad handling and combo debounce state.
 
-## Legacy expression left unchanged
+## Compatibility choices
 
-The original Reset long-press code contains `millis() % last_pressed`. This looks suspicious compared with the Pause path (`millis() - last_pressed`), but it is deliberately preserved in this modernization pass to avoid silently changing behaviour. It is marked in `ConsoleControl.cpp` for a dedicated bug-fix pass.
+The implementation intentionally keeps the original controller timing sequence, EEPROM offsets, combo masks and the historical Reset long-press expression. The unused original `remapButton()` capability is represented by `RemappingManager::setButton()`, and `readPadPin7()` by `PadController::readSelectPin()`.

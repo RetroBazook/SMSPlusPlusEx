@@ -10,20 +10,25 @@
 
 #pragma once
 
-#include <Arduino.h>
+#include "Types.h"
 
-class PadHandler {
+class VideoModeManager {
 public:
-    void update();
+    void begin();
+    void saveIfNeeded();
+
+    void set(VideoMode mode);
+    void next();
+    void previous();
+
+    VideoMode current() const { return currentMode_; }
 
 private:
-    unsigned long lastComboAt_ = 0;
+    VideoMode currentMode_ = VID_50HZ;
+    unsigned long lastChangeAt_ = 0;
 
-    static bool comboPressed(word padStatus, word combo);
-    void markComboHandled();
-    void handleSpecialCombos(word padStatus);
-    static void updateMasterSystemPad();
-    void updateMegaDrivePad();
+    void updateLeds() const;
+    void blinkSaved() const;
 };
 
-extern PadHandler padHandler;
+extern VideoModeManager videoModeManager;
