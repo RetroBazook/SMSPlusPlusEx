@@ -10,16 +10,30 @@
 
 #include <Arduino.h>
 
+#include "AutoFireManager.h"
+#include "ComboHandler.h"
 #include "Config.h"
 #include "ConsoleController.h"
 #include "Debug.h"
 #include "PadController.h"
 #include "PadHandler.h"
+#include "PadPort.h"
 #include "RemappingManager.h"
 #include "StatusLed.h"
 #include "VideoModeManager.h"
 
 namespace {
+// Composition root: dependencies are assembled here and nowhere else.
+VideoModeManager videoMode;
+StatusLed statusLed;
+PadPort padPort;
+PadController pad(padPort);
+ConsoleController console(videoMode);
+RemappingManager remapping(pad, statusLed);
+AutoFireManager autoFire;
+ComboHandler combos(console, videoMode, remapping, autoFire);
+PadHandler padHandler(pad, console, remapping, autoFire, combos);
+
 void indicateDetectedPad(PadType type) {
     switch (type) {
         case PAD_SMS:     statusLed.blinkBlocking(2); break;
@@ -31,16 +45,16 @@ void indicateDetectedPad(PadType type) {
 }
 
 bool ensureGamepadDetected() {
-    if (padController.isDetected()) {
+    if (pad.isDetected()) {
         return true;
     }
 
-    padController.detect();
-    if (!padController.isDetected()) {
+    pad.detect();
+    if (!pad.isDetected()) {
         return false;
     }
 
-    indicateDetectedPad(padController.type());
+    indicateDetectedPad(pad.type());
     return true;
 }
 }  // namespace
@@ -51,23 +65,23 @@ void setup() {
 #endif
     debugln(F("Starting up..."));
 
-    // Keep the console in reset until every I/O path is configured.
-    consoleController.holdReset();
+    // Keep the console reset until every I/O path is configured.
+    console.holdReset();
 
 #ifdef PAD_LED_PIN
     pinMode(PAD_LED_PIN, OUTPUT);
 #endif
 
-    videoModeManager.begin();
-    remappingManager.begin();
-    padController.begin();
-    consoleController.initializeInputs();
+    videoMode.begin();
+    remapping.begin();
+    pad.begin();
+    console.initializeInputs();
 
 #ifdef FMSOUND_OUT_PIN
-    consoleController.initializeFmSound();
+    console.initializeFmSound();
 #endif
 
-    consoleController.releaseReset();
+    console.releaseReset();
 }
 
 void loop() {
@@ -75,12 +89,12 @@ void loop() {
         return;
     }
 
-    if (remappingManager.isActive()) {
-        remappingManager.update();
+    if (remapping.isActive()) {
+        remapping.update();
     } else {
-        consoleController.updateResetButton();
+        console.updateResetButton();
         padHandler.update();
-        videoModeManager.saveIfNeeded();
+        videoMode.saveIfNeeded();
     }
 
     statusLed.update();

@@ -31,4 +31,3 @@ private:
     void blinkSaved() const;
 };
 
-extern VideoModeManager videoModeManager;

@@ -8,15 +8,14 @@
  * version.
  *******************************************************************************/
 
+#include "FirmwareConfig.h"
 #include "StatusLed.h"
-
-StatusLed statusLed;
 
 void StatusLed::blinkBlocking(uint8_t blinkCount) {
     for (uint8_t i = 0; i < blinkCount * 2U; ++i) {
         ledState_ = !ledState_;
         digitalWrite(LED_BUILTIN, ledState_ ? HIGH : LOW);
-        delay(kBlinkDurationMs);
+        delay(FirmwareConfig::Timing::StatusLedBlinkMs);
     }
 
     ledState_ = HIGH;
@@ -41,7 +40,7 @@ void StatusLed::stopBlink() {
 }
 
 void StatusLed::update() {
-    if (remainingToggles_ == 0 || millis() - lastBlinkAt_ < kBlinkDurationMs) {
+    if (remainingToggles_ == 0 || millis() - lastBlinkAt_ < FirmwareConfig::Timing::StatusLedBlinkMs) {
         return;
     }
 

@@ -9,58 +9,18 @@
  *******************************************************************************/
 
 #include "Config.h"
-#include "ConsoleController.h"
 #include "Debug.h"
 #include "PadController.h"
-#include "RemappingManager.h"
 
-PadController padController;
+using namespace FirmwareConfig;
 
-void PadController::setSelect(byte level) {
-    if (level != LOW) {
-        POREG_SELECT |= (1U << PDREG_SELECT_BIT);
-    } else {
-        POREG_SELECT &= ~(1U << PDREG_SELECT_BIT);
-    }
-}
+bool PadController::anyButtonPressed(uint8_t port) { return port != 0b00111111; }
+bool PadController::leftAndRightPressed(uint8_t port) { return (port & 0x0C) == 0; }
 
-byte PadController::readPort() {
-    return PIREG_PAD & PDREG_PAD_BITS;
-}
-
-void PadController::setSelectLineOutput() {
-    pinMode(SELECT_PAD_PIN, OUTPUT);
-}
-
-void PadController::setSelectLineInput() {
-    pinMode(SELECT_PAD_PIN, INPUT_PULLUP);
-}
-
-bool PadController::anyButtonPressed(byte port) {
-    return port != 0b00111111;
-}
-
-bool PadController::leftAndRightPressed(byte port) {
-    return (port & 0x0C) == 0;
-}
-
-void PadController::begin() {
-    setSelectLineInput();
-    PDREG_PAD_PORT &= ~PDREG_PAD_BITS;
-    POREG_PAD |= PDREG_PAD_BITS;
-
-    PDREG_TRACES_PORT |= PDREG_TRACES_BITS;
-#ifdef PDREG_TRACE7_PORT
-    PDREG_TRACE7_PORT |= 1U << PDREG_TRACE7_BIT;
-#endif
-    writeMasterSystemPad(0x00);
-
-    pinMode(TI4066_CONTROL_PIN, OUTPUT);
-    digitalWrite(TI4066_CONTROL_PIN, LOW);
-}
+void PadController::begin() { port_.begin(); }
 
 void PadController::selectMasterSystemPad() {
-    setSelectLineInput();
+    port_.setSelectAsInput();
     delay(10);
     digitalWrite(TI4066_CONTROL_PIN, HIGH);
     detectedType_ = PAD_SMS;
@@ -68,149 +28,85 @@ void PadController::selectMasterSystemPad() {
 
 void PadController::selectMegaDrivePad() {
     detectedType_ = PAD_MD;
+    port_.setSelect(HIGH); delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
+    port_.setSelect(LOW);  delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
+    port_.setSelect(HIGH); delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
+    port_.setSelect(LOW);  delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
 
-    setSelect(HIGH);
-    delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-    setSelect(LOW);
-    delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-    setSelect(HIGH);
-    delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-    setSelect(LOW);
-    delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-
-    byte port = readPort();
+    uint8_t port = port_.read();
 #ifdef DEBUG_PAD
-    debug(F("Port Read #2 = "));
-    debugln(port, BIN);
+    debug(F("Port Read #2 = ")); debugln(port, BIN);
 #endif
-
     if ((port & 0x0F) == 0x00) {
-        setSelect(HIGH);
-        delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-        setSelect(LOW);
-        delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-
-        port = readPort();
+        port_.setSelect(HIGH); delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
+        port_.setSelect(LOW);  delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
+        port = port_.read();
 #ifdef DEBUG_PAD
-        debug(F("Port Read #3 = "));
-        debugln(port, BIN);
+        debug(F("Port Read #3 = ")); debugln(port, BIN);
 #endif
-        if ((port & 0x0F) == 0x0F) {
-            detectedType_ = PAD_MD_6BTN;
-        }
+        if ((port & 0x0F) == 0x0F) detectedType_ = PAD_MD_6BTN;
     }
-
-    setSelect(HIGH);
+    port_.setSelect(HIGH);
 }
 
 void PadController::detect() {
-    if (consoleController.isThActive()) {
-        selectMasterSystemPad();
-        return;
-    }
-
-    setSelectLineOutput();
-    delay(10);
-
-    setSelect(HIGH);
-    delay(10);
-    const byte portHigh = readPort();
-    const bool buttonPressedWithSelectHigh = anyButtonPressed(portHigh);
-
-    setSelect(LOW);
-    delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-    const byte portLow = readPort();
-
+    if (port_.isThActive()) { selectMasterSystemPad(); return; }
+    port_.setSelectAsOutput(); delay(10);
+    port_.setSelect(HIGH); delay(10);
+    const bool highPressed = anyButtonPressed(port_.read());
+    port_.setSelect(LOW); delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
+    const uint8_t low = port_.read();
 #ifdef DEBUG_PAD
-    debug(F("Port Read #1 = "));
-    debugln(portLow, BIN);
+    debug(F("Port Read #1 = ")); debugln(low, BIN);
 #endif
-
-    if (leftAndRightPressed(portLow)) {
-        selectMegaDrivePad();
-        return;
-    }
-    if (buttonPressedWithSelectHigh) {
-        selectMasterSystemPad();
-        return;
-    }
-
-    setSelectLineInput();
-    delay(10);
+    if (leftAndRightPressed(low)) { selectMegaDrivePad(); return; }
+    if (highPressed) { selectMasterSystemPad(); return; }
+    port_.setSelectAsInput(); delay(10);
 }
 
-word PadController::readMegaDrivePad() {
-    static word status = 0x0000;
-
-    setSelect(HIGH);
-    delay(10);
-
-    byte port = readPort();
-    status = (status & 0xFFC0) | (~port & 0x3F);
-
-    setSelect(LOW);
-    delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-
-    port = readPort();
-    status = (status & 0xFF3F) | ((~port & 0x30) << 2);
-
+uint16_t PadController::readMegaDrivePad() {
+    static uint16_t status = 0;
+    port_.setSelect(HIGH); delay(10);
+    uint8_t port = port_.read();
+    status = (status & 0xFFC0U) | (~port & 0x3FU);
+    port_.setSelect(LOW); delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
+    port = port_.read();
+    status = (status & 0xFF3FU) | ((~port & 0x30U) << 2);
     if (detectedType_ == PAD_MD_6BTN) {
-        setSelect(HIGH);
-        delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-        setSelect(LOW);
-        delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-        setSelect(HIGH);
-        delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-        setSelect(LOW);
-        delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-        setSelect(HIGH);
-        delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
-
-        port = readPort();
-        status = (status & 0xF0FF) | ((((word)~port) & 0x000F) << 8);
-
-        setSelect(LOW);
-        delayMicroseconds(SIXMD_BTN_PULSE_INTERVAL);
+        port_.setSelect(HIGH); delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
+        port_.setSelect(LOW);  delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
+        port_.setSelect(HIGH); delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
+        port_.setSelect(LOW);  delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
+        port_.setSelect(HIGH); delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
+        port = port_.read();
+        status = (status & 0xF0FFU) | ((static_cast<uint16_t>(~port) & 0x000FU) << 8);
+        port_.setSelect(LOW); delayMicroseconds(Timing::MegaDriveSixButtonPulseUs);
     }
-
-    setSelect(HIGH);
-    status &= 0x0FFF;
-
+    port_.setSelect(HIGH);
+    status &= 0x0FFFU;
 #ifdef DEBUG_PAD
     debugMegaDriveButtons(status);
 #endif
     return status;
 }
 
-byte PadController::readMasterSystemPad() const {
-    const byte status = static_cast<byte>(~readPort()) & 0x7F;
+uint8_t PadController::readMasterSystemPad() const {
+    const uint8_t status = static_cast<uint8_t>(~port_.read()) & 0x7FU;
 #ifdef DEBUG_PAD
     debugMasterSystemButtons(status);
 #endif
     return status;
 }
 
-void PadController::writeMasterSystemPad(byte padStatus) const {
-    if (remappingManager.isActive()) {
-        return;
-    }
+void PadController::writeMasterSystemPad(uint8_t padStatus) const {
 #ifdef DEBUG_PAD
-    debug(F("Sending SMS pad status: "));
-    debugln(padStatus, BIN);
+    debug(F("Sending SMS pad status: ")); debugln(padStatus, BIN);
 #endif
-    POREG_TRACES = ~padStatus & PDREG_TRACES_BITS;
-}
-
-bool PadController::readSelectPin() const {
-#ifdef PIREG_SELECT
-    return (PIREG_SELECT & (1U << PDREG_SELECT_BIT)) != 0;
-#else
-    return false;
-#endif
+    port_.writeMasterSystem(padStatus);
 }
 
 #ifdef DEBUG_PAD
-void PadController::debugMegaDriveButtons(word status) {
+void PadController::debugMegaDriveButtons(uint16_t status) {
     debug(F("Pressed: "));
     if (status & MD_BTN_UP) debug(F("Up "));
     if (status & MD_BTN_DOWN) debug(F("Down "));
@@ -227,7 +123,7 @@ void PadController::debugMegaDriveButtons(word status) {
     debugln();
 }
 
-void PadController::debugMasterSystemButtons(byte status) {
+void PadController::debugMasterSystemButtons(uint8_t status) {
     debug(F("Pressed: "));
     if (status & SMS_BTN_UP) debug(F("Up "));
     if (status & SMS_BTN_DOWN) debug(F("Down "));

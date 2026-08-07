@@ -21,8 +21,10 @@
  * Arduino Uno/Nano, but these have different configurations, so the
  * board type must be defined MANUALLY
  */
-//~ #define ARDUINO_UNO
+// Select the Nano by default, but allow the build system to override it.
+#if !defined(ARDUINO_UNO) && !defined(ARDUINO_NANO)
 #define ARDUINO_NANO
+#endif
 
 #if defined(ARDUINO_UNO)
 
@@ -73,6 +75,7 @@
 #define RESET_OUT_PIN 3
 #define VIDEOMODE_PIN 2
 #define SELECT_PAD_PIN 6
+#define TI4066_CONTROL_PIN 7
 
 /* If leds are enabled, the serial console (useful for debugging) will be
  * disabled
@@ -107,7 +110,6 @@
 //Set FM Sound output at the place of Pad Type
 #define FMSOUND_OUT_PIN 0   // RX0
 #define JAP_FMSOUND_OUT_PIN 1   // TX1
-#define FM_MOD_OFFSET 45
 
 // #if !defined(MODE_LED_R_PIN) && !defined(MODE_LED_G_PIN)
 // #define ENABLE_SERIAL_DEBUG
@@ -208,7 +210,6 @@
 //Set FM Sound output at the place of Pad Type
 #define FMSOUND_OUT_PIN 5  //D5
 #define JAP_FMSOUND_OUT_PIN 1   // TX1
-#define FM_MOD_OFFSET 45
 
 
 // #if !defined(MODE_LED_R_PIN) && !defined(MODE_LED_G_PIN)

@@ -15,7 +15,15 @@
 #include "Debug.h"
 #include "VideoModeManager.h"
 
-ConsoleController consoleController;
+using namespace FirmwareConfig;
+
+ConsoleController::ConsoleController(VideoModeManager& videoMode)
+    : video_(videoMode),
+      resetButton_(
+          Timing::DebounceMs,
+          Timing::LongPressMs,
+          DebouncedButton::LongPressClock::LegacyModulo),
+      pauseButton_(Timing::DebounceMs, Timing::LongPressMs) {}
 
 #ifdef RESET_IN_PIN
 byte ConsoleController::readResetInput() {
@@ -55,7 +63,7 @@ void ConsoleController::releaseReset() {
 void ConsoleController::pulseReset() {
     debugln(F("Resetting console"));
     holdReset();
-    delay(PULSE_LEN);
+    delay(Timing::ConsolePulseMs);
     releaseReset();
 }
 
@@ -74,7 +82,7 @@ void ConsoleController::releasePause() {
 void ConsoleController::pulsePause() {
     debugln(F("Pausing console"));
     holdPause();
-    delay(PULSE_LEN);
+    delay(Timing::ConsolePulseMs);
     releasePause();
 }
 
@@ -94,7 +102,7 @@ void ConsoleController::initializeFmSound() {
     pinMode(FMSOUND_OUT_PIN, OUTPUT);
     pinMode(JAP_FMSOUND_OUT_PIN, OUTPUT);
 
-    currentFmMode_ = static_cast<SwitchMode>(EEPROM.read(FM_MOD_OFFSET));
+    currentFmMode_ = static_cast<SwitchMode>(EEPROM.read(EepromAddress::FmMode));
     if (currentFmMode_ > JAP_FM) {
         currentFmMode_ = PSG;
     }
@@ -103,11 +111,10 @@ void ConsoleController::initializeFmSound() {
     digitalWrite(JAP_FMSOUND_OUT_PIN, LOW);
     delayMicroseconds(100);
 
-    switch (currentFmMode_) {
-        case FM:     digitalWrite(FMSOUND_OUT_PIN, HIGH); break;
-        case JAP_FM: digitalWrite(JAP_FMSOUND_OUT_PIN, HIGH); break;
-        case PSG:
-        default: break;
+    if (currentFmMode_ == FM) {
+        digitalWrite(FMSOUND_OUT_PIN, HIGH);
+    } else if (currentFmMode_ == JAP_FM) {
+        digitalWrite(JAP_FMSOUND_OUT_PIN, HIGH);
     }
 }
 
@@ -116,54 +123,29 @@ void ConsoleController::switchFmSoundAndReset(SwitchMode mode) {
         return;
     }
 
-    EEPROM.write(FM_MOD_OFFSET, static_cast<uint8_t>(mode));
+    EEPROM.write(EepromAddress::FmMode, static_cast<uint8_t>(mode));
     pulseReset();
 }
 #endif
 
-bool ConsoleController::isThActive() const {
-    return (PIND & (1U << SELECT_PAD_PIN)) == 0;
-}
-
 void ConsoleController::updateResetButton() {
 #ifdef RESET_IN_PIN
-    static byte debounceLevel = LOW;
-    static bool wasPressed = false;
-    static unsigned long lastTransitionAt = 0;
-    static unsigned long pressedAt = 0;
-    static unsigned int holdCycles = 0;
+    switch (resetButton_.update(readResetInput())) {
+        case DebouncedButton::Event::Released:
+            if (resetButton_.holdCycles() == 0) {
+                debugln(F("Reset button pushed for a short time"));
+                pulseReset();
+            }
+            break;
 
-    const byte level = readResetInput();
-    const unsigned long now = millis();
-
-    if (level != debounceLevel) {
-        debounceLevel = level;
-        lastTransitionAt = now;
-        return;
-    }
-    if (now - lastTransitionAt <= DEBOUNCE_MS) {
-        return;
-    }
-
-    const bool isPressed = level == LOW;
-    if (isPressed && !wasPressed) {
-        pressedAt = now;
-        holdCycles = 0;
-    } else if (!isPressed && wasPressed) {
-        if (holdCycles == 0) {
-            debugln(F("Reset button pushed for a short time"));
-            pulseReset();
-        }
-    } else if (isPressed) {
-        // Preserved from the original implementation on purpose.
-        if (now % pressedAt >= LONGPRESS_LEN * (holdCycles + 1U)) {
+        case DebouncedButton::Event::LongPress:
             debugln(F("Reset button held"));
-            ++holdCycles;
-            videoModeManager.next();
-        }
-    }
+            video_.next();
+            break;
 
-    wasPressed = isPressed;
+        default:
+            break;
+    }
 #else
 #warning "RESET button handling disabled"
 #endif
@@ -171,45 +153,30 @@ void ConsoleController::updateResetButton() {
 
 void ConsoleController::updatePauseButton(bool gamepadStartPressed) {
 #ifdef PAUSE_IN_PIN
-    static byte debounceLevel = LOW;
-    static bool wasPressed = false;
-    static unsigned long lastTransitionAt = 0;
-    static unsigned long pressedAt = 0;
-    static unsigned int holdCycles = 0;
+    const auto event = pauseButton_.update(
+        readPauseInput(gamepadStartPressed),
+        !gamepadStartPressed);
 
-    const byte level = readPauseInput(gamepadStartPressed);
-    const unsigned long now = millis();
-
-    if (level != debounceLevel) {
-        debounceLevel = level;
-        lastTransitionAt = now;
-        return;
-    }
-    if (now - lastTransitionAt <= DEBOUNCE_MS) {
-        return;
-    }
-
-    const bool isPressed = level == LOW;
-    if (isPressed && !wasPressed) {
-        pressedAt = now;
-        holdCycles = 0;
-    } else if (!isPressed && wasPressed) {
-        if (holdCycles == 0) {
-            debugln(F("Pause button pushed for a short time"));
+    switch (event) {
+        case DebouncedButton::Event::Released:
+            if (pauseButton_.holdCycles() == 0) {
+                debugln(F("Pause button pushed for a short time"));
 #ifdef RESET_ON_PAUSE
-            pulseReset();
+                pulseReset();
 #else
-            pulsePause();
+                pulsePause();
 #endif
-        }
-    } else if (!gamepadStartPressed && isPressed &&
-               now - pressedAt >= LONGPRESS_LEN * (holdCycles + 1U)) {
-        debugln(F("Pause button held"));
-        ++holdCycles;
-        videoModeManager.next();
-    }
+            }
+            break;
 
-    wasPressed = isPressed;
+        case DebouncedButton::Event::LongPress:
+            debugln(F("Pause button held"));
+            video_.next();
+            break;
+
+        default:
+            break;
+    }
 #else
 #warning "PAUSE button handling disabled"
 #endif

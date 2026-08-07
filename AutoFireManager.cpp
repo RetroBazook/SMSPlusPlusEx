@@ -9,12 +9,9 @@
  *******************************************************************************/
 
 #include "AutoFireManager.h"
-#include "RemappingManager.h"
-
-AutoFireManager autoFireManager;
 
 namespace {
-constexpr byte kHitsPerSecond[AF_MODES_NO] = {5, 10, 15, 20};
+constexpr uint8_t kHitsPerSecond[AF_MODES_NO] = {5, 10, 15, 20};
 }
 
 bool AutoFireManager::isOn(ButtonState& state) {
@@ -32,8 +29,11 @@ void AutoFireManager::cycle(ButtonState& state) {
     state.rate = static_cast<AutoFireRate>((state.rate + 1) % AF_MODES_NO);
 }
 
-byte AutoFireManager::convertToMasterSystem(word megaDrivePad) {
-    byte smsPad = 0;
+uint8_t AutoFireManager::convertToMasterSystem(
+    uint16_t megaDrivePad,
+    const ButtonMapping& mapping) {
+
+    uint8_t smsPad = 0;
 
     if (megaDrivePad & MD_BTN_UP)    smsPad |= SMS_BTN_UP;
     if (megaDrivePad & MD_BTN_DOWN)  smsPad |= SMS_BTN_DOWN;
@@ -41,23 +41,27 @@ byte AutoFireManager::convertToMasterSystem(word megaDrivePad) {
     if (megaDrivePad & MD_BTN_RIGHT) smsPad |= SMS_BTN_RIGHT;
 
     const bool autoLeftPressed =
-        megaDrivePad & (remappingManager.autoBothButton() | remappingManager.autoLeftButton());
+        megaDrivePad & (mapping.autoBoth() | mapping.autoLeft());
     const bool autoRightPressed =
-        megaDrivePad & (remappingManager.autoBothButton() | remappingManager.autoRightButton());
+        megaDrivePad & (mapping.autoBoth() | mapping.autoRight());
 
     if (autoLeftPressed) {
-        if (isOn(left_)) smsPad |= SMS_BTN_B1;
+        if (isOn(left_)) {
+            smsPad |= SMS_BTN_B1;
+        }
     } else {
-        if (megaDrivePad & (remappingManager.leftButton() | remappingManager.bothButton())) {
+        if (megaDrivePad & (mapping.left() | mapping.both())) {
             smsPad |= SMS_BTN_B1;
         }
         left_.pressStartedAt = 0;
     }
 
     if (autoRightPressed) {
-        if (isOn(right_)) smsPad |= SMS_BTN_B2;
+        if (isOn(right_)) {
+            smsPad |= SMS_BTN_B2;
+        }
     } else {
-        if (megaDrivePad & (remappingManager.rightButton() | remappingManager.bothButton())) {
+        if (megaDrivePad & (mapping.right() | mapping.both())) {
             smsPad |= SMS_BTN_B2;
         }
         right_.pressStartedAt = 0;
@@ -66,6 +70,15 @@ byte AutoFireManager::convertToMasterSystem(word megaDrivePad) {
     return smsPad;
 }
 
-void AutoFireManager::cycleLeft()  { cycle(left_); }
-void AutoFireManager::cycleRight() { cycle(right_); }
-void AutoFireManager::cycleBoth()  { cycle(left_); cycle(right_); }
+void AutoFireManager::cycleLeft() {
+    cycle(left_);
+}
+
+void AutoFireManager::cycleRight() {
+    cycle(right_);
+}
+
+void AutoFireManager::cycleBoth() {
+    cycle(left_);
+    cycle(right_);
+}

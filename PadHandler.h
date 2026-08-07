@@ -9,21 +9,13 @@
  *******************************************************************************/
 
 #pragma once
-
-#include <Arduino.h>
-
+class AutoFireManager; class ComboHandler; class ConsoleController; class PadController; class RemappingManager;
 class PadHandler {
 public:
+    PadHandler(PadController& pad, ConsoleController& console, RemappingManager& remap, AutoFireManager& autoFire, ComboHandler& combos)
+      : pad_(pad),console_(console),remap_(remap),autoFire_(autoFire),combos_(combos){}
     void update();
-
 private:
-    unsigned long lastComboAt_ = 0;
-
-    static bool comboPressed(word padStatus, word combo);
-    void markComboHandled();
-    void handleSpecialCombos(word padStatus);
-    static void updateMasterSystemPad();
-    void updateMegaDrivePad();
+    PadController& pad_; ConsoleController& console_; RemappingManager& remap_; AutoFireManager& autoFire_; ComboHandler& combos_;
+    void updateMasterSystemPad(); void updateMegaDrivePad();
 };
-
-extern PadHandler padHandler;

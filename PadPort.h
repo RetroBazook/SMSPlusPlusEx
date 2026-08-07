@@ -9,17 +9,17 @@
  *******************************************************************************/
 
 #pragma once
-#include <Arduino.h>
-#include "ButtonMapping.h"
-#include "Types.h"
 
-class AutoFireManager {
+#include <Arduino.h>
+
+class PadPort {
 public:
-    uint8_t convertToMasterSystem(uint16_t megaDrivePad, const ButtonMapping& mapping);
-    void cycleLeft(); void cycleRight(); void cycleBoth();
-private:
-    struct ButtonState { AutoFireRate rate=AF_MEDIUM; unsigned long pressStartedAt=0; };
-    ButtonState left_, right_;
-    static bool isOn(ButtonState& state);
-    static void cycle(ButtonState& state);
+    void begin();
+    void setSelect(byte level) const;
+    void setSelectAsOutput() const;
+    void setSelectAsInput() const;
+    byte read() const;
+    void writeMasterSystem(byte padStatus) const;
+    bool readSelectPin() const;
+    bool isThActive() const;
 };

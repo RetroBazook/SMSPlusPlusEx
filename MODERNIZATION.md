@@ -1,25 +1,25 @@
+/*******************************************************************************
+ * This file is part of SMS++.
+ * Copyright (C) 2016 by SukkoPera <software@sukkology.net>
+ *
+ * SMS++ is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *******************************************************************************/
+
 # Modernization notes
 
-This revision keeps the firmware statically allocated and AVR-friendly while making ownership explicit.
+This pass focuses on readability, testability and flexibility without intentionally changing SMSPlusPlusEx behaviour.
 
-## Design rules
+Key changes:
+- constructor injection replaces cross-module global singleton access;
+- hardware register access moved from `PadController` to `PadPort`;
+- mapping represented by `ButtonMapping` instead of six unrelated getters;
+- combo dispatch moved out of `PadHandler` into `ComboHandler`;
+- Reset/Pause debounce logic shares `DebouncedButton`;
+- configuration values grouped under `FirmwareConfig::{Combo,Timing,EepromAddress}`;
+- Arduino `word`/`byte` are progressively replaced by fixed-width integer types in feature APIs;
+- the unused `PAD_USE_THIRD_BTN_AS_2BTNS` macro is removed instead of pretending to be an active option.
 
-- One stateful component class per `.cpp` file.
-- No inheritance, virtual methods, heap allocation, STL containers or exceptions.
-- AVR register aliases remain macros in `BoardConfig.h` for clarity and timing-sensitive access.
-- Shared bit-mask enums remain unscoped because the firmware intentionally uses bitwise operations on them.
-- `SMSPlusPlusEx.ino` only coordinates startup and the main loop.
-
-## Stateful components
-
-- `ConsoleController`: reset, pause, physical buttons, TH and FM switch.
-- `VideoModeManager`: video mode state and EEPROM persistence.
-- `PadController`: controller detection and wire protocol.
-- `RemappingManager`: mapping state and EEPROM persistence.
-- `AutoFireManager`: autofire timers/rates and MD-to-SMS conversion.
-- `StatusLed`: built-in LED animation state.
-- `PadHandler`: high-level pad handling and combo debounce state.
-
-## Compatibility choices
-
-The implementation intentionally keeps the original controller timing sequence, EEPROM offsets, combo masks and the historical Reset long-press expression. The unused original `remapButton()` capability is represented by `RemappingManager::setButton()`, and `readPadPin7()` by `PadController::readSelectPin()`.
+The Reset long-press still uses the original modulo-based timing through `DebouncedButton::LongPressClock::LegacyModulo`; changing it should be a separate behavioural fix.

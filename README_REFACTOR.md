@@ -1,10 +1,13 @@
-# SMSPlusPlusEx refactored layout
+/*******************************************************************************
+ * This file is part of SMS++.
+ * Copyright (C) 2016 by SukkoPera <software@sukkology.net>
+ *
+ * SMS++ is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
+ *******************************************************************************/
 
-Open `SMSPlusPlusEx.ino` in the Arduino IDE. The sketch remains targeted at the board selected in `BoardConfig.h`.
+# SMSPlusPlusEx refactor
 
-Configuration is intentionally split in two:
-
-- `BoardConfig.h`: physical pins and AVR register mappings.
-- `Config.h`: button combos, EEPROM offsets, timings and optional features.
-
-See `ARCHITECTURE.md` and `MODERNIZATION.md` for the class/module layout and compatibility notes.
+See `ARCHITECTURE.md` and `MODERNIZATION.md`.

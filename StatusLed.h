@@ -20,11 +20,8 @@ public:
     void update();
 
 private:
-    static constexpr unsigned long kBlinkDurationMs = 250UL;
-
     unsigned long lastBlinkAt_ = 0;
     bool ledState_ = HIGH;
     int remainingToggles_ = 0;  // Negative means blink indefinitely.
 };
 
-extern StatusLed statusLed;

@@ -10,12 +10,12 @@
 
 #include <EEPROM.h>
 
-#include "Config.h"
+#include "FirmwareConfig.h"
 #include "PadController.h"
 #include "RemappingManager.h"
 #include "StatusLed.h"
 
-RemappingManager remappingManager;
+using namespace FirmwareConfig;
 
 BtnNumber RemappingManager::buttonToNumber(MdButton button) {
     switch (button) {
@@ -25,7 +25,7 @@ BtnNumber RemappingManager::buttonToNumber(MdButton button) {
         case MD_BTN_X: return BTN_NB_X;
         case MD_BTN_Y: return BTN_NB_Y;
         case MD_BTN_Z: return BTN_NB_Z;
-        default:       return static_cast<BtnNumber>(0xFF);
+        default: return static_cast<BtnNumber>(0xFF);
     }
 }
 
@@ -37,31 +37,26 @@ MdButton RemappingManager::numberToButton(BtnNumber number) {
         case BTN_NB_X: return MD_BTN_X;
         case BTN_NB_Y: return MD_BTN_Y;
         case BTN_NB_Z: return MD_BTN_Z;
-        default:       return static_cast<MdButton>(0);
+        default: return static_cast<MdButton>(0);
     }
 }
 
 void RemappingManager::save() const {
-    for (uint8_t i = 0; i < kMappingSize; ++i) {
-        EEPROM.update(REMAP_OFFSET + i, static_cast<uint8_t>(buttonToNumber(mapping_[i])));
+    for (uint8_t index = 0; index < ButtonMapping::Size; ++index) {
+        const auto slot = static_cast<ButtonMapping::Slot>(index);
+        const uint8_t storedButton = static_cast<uint8_t>(buttonToNumber(mapping_.get(slot)));
+        EEPROM.update(EepromAddress::Remapping + index, storedButton);
     }
 }
 
 void RemappingManager::restoreDefaults() {
-    static const MdButton defaults[kMappingSize] = {
-        MD_BTN_B, MD_BTN_C, MD_BTN_A,
-        MD_BTN_Y, MD_BTN_Z, MD_BTN_X,
-    };
-
-    for (uint8_t i = 0; i < kMappingSize; ++i) {
-        mapping_[i] = defaults[i];
-    }
+    mapping_.restoreDefaults();
     save();
 }
 
 void RemappingManager::begin() {
-    for (uint8_t i = 0; i < kMappingSize; ++i) {
-        const BtnNumber stored = static_cast<BtnNumber>(EEPROM.read(REMAP_OFFSET + i));
+    for (uint8_t index = 0; index < ButtonMapping::Size; ++index) {
+        const auto stored = static_cast<BtnNumber>(EEPROM.read(EepromAddress::Remapping + index));
         const MdButton button = numberToButton(stored);
 
         if (button == static_cast<MdButton>(0)) {
@@ -69,19 +64,16 @@ void RemappingManager::begin() {
             return;
         }
 
-        mapping_[i] = button;
+        mapping_.set(index, button);
     }
 }
 
 void RemappingManager::startFullRemap() {
-    for (MdButton& button : mapping_) {
-        button = static_cast<MdButton>(0);
-    }
-
+    mapping_.clear();
     remapIndex_ = 0;
     threeButtonMode_ = false;
     blockedUntil_ = 0;
-    statusLed.startContinuousBlink();
+    led_.startContinuousBlink();
 }
 
 void RemappingManager::startThreeButtonRemap() {
@@ -89,7 +81,7 @@ void RemappingManager::startThreeButtonRemap() {
     threeButtonMode_ = true;
 }
 
-MdButton RemappingManager::compatibleButton(word padStatus) const {
+MdButton RemappingManager::compatibleButton(uint16_t padStatus) const {
     switch (padStatus) {
         case MD_BTN_A: return MD_BTN_A;
         case MD_BTN_B: return MD_BTN_B;
@@ -97,31 +89,22 @@ MdButton RemappingManager::compatibleButton(word padStatus) const {
         case MD_BTN_X: return threeButtonMode_ ? static_cast<MdButton>(0) : MD_BTN_X;
         case MD_BTN_Y: return threeButtonMode_ ? static_cast<MdButton>(0) : MD_BTN_Y;
         case MD_BTN_Z: return threeButtonMode_ ? static_cast<MdButton>(0) : MD_BTN_Z;
-        default:       return static_cast<MdButton>(0);
+        default: return static_cast<MdButton>(0);
     }
-}
-
-bool RemappingManager::alreadyContains(MdButton button, uint8_t count) const {
-    for (uint8_t i = 0; i < count; ++i) {
-        if (mapping_[i] == button) {
-            return true;
-        }
-    }
-    return false;
 }
 
 void RemappingManager::mirrorThreeButtonMapping(MdButton button, uint8_t index) {
     switch (button) {
-        case MD_BTN_A: mapping_[index + 3] = MD_BTN_X; break;
-        case MD_BTN_B: mapping_[index + 3] = MD_BTN_Y; break;
-        case MD_BTN_C: mapping_[index + 3] = MD_BTN_Z; break;
+        case MD_BTN_A: mapping_.set(index + 3, MD_BTN_X); break;
+        case MD_BTN_B: mapping_.set(index + 3, MD_BTN_Y); break;
+        case MD_BTN_C: mapping_.set(index + 3, MD_BTN_Z); break;
         default: break;
     }
 }
 
 void RemappingManager::finish() {
     save();
-    statusLed.stopBlink();
+    led_.stopBlink();
     remapIndex_ = -1;
     threeButtonMode_ = false;
 }
@@ -131,37 +114,34 @@ void RemappingManager::update() {
         return;
     }
 
-    const MdButton button = compatibleButton(padController.readMegaDrivePad());
+    const MdButton button = compatibleButton(pad_.readMegaDrivePad());
     if (button == static_cast<MdButton>(0)) {
         return;
     }
 
+    // The original 3-button flow checks all three primary slots for duplicates.
     const uint8_t duplicateCheckCount = threeButtonMode_
         ? kThreeButtonMappingSize
         : static_cast<uint8_t>(remapIndex_);
-    if (alreadyContains(button, duplicateCheckCount)) {
+
+    if (mapping_.contains(button, duplicateCheckCount)) {
         return;
     }
 
-    mapping_[remapIndex_] = button;
+    mapping_.set(static_cast<uint8_t>(remapIndex_), button);
     if (threeButtonMode_) {
         mirrorThreeButtonMapping(button, static_cast<uint8_t>(remapIndex_));
     }
 
     ++remapIndex_;
-    const uint8_t requiredButtons = threeButtonMode_ ? kThreeButtonMappingSize : kMappingSize;
+    const uint8_t requiredButtons = threeButtonMode_
+        ? kThreeButtonMappingSize
+        : ButtonMapping::Size;
+
     if (remapIndex_ >= requiredButtons) {
         finish();
         return;
     }
 
-    blockedUntil_ = millis() + kDebounceMs;
-}
-
-bool RemappingManager::setButton(uint8_t index, MdButton button) {
-    if (index >= kMappingSize) {
-        return false;
-    }
-    mapping_[index] = button;
-    return true;
+    blockedUntil_ = millis() + Timing::RemapDebounceMs;
 }

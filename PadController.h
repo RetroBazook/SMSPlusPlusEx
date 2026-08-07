@@ -12,40 +12,30 @@
 
 #include <Arduino.h>
 #include "Config.h"
+#include "PadPort.h"
 #include "Types.h"
 
 class PadController {
 public:
+    explicit PadController(PadPort& port) : port_(port) {}
     void begin();
     void detect();
-
     PadType type() const { return detectedType_; }
     bool isDetected() const { return detectedType_ != PAD_NONE; }
-
-    word readMegaDrivePad();
-    byte readMasterSystemPad() const;
-    void writeMasterSystemPad(byte padStatus) const;
-
-    // Retained low-level capability from the original readPadPin7() helper.
-    bool readSelectPin() const;
+    uint16_t readMegaDrivePad();
+    uint8_t readMasterSystemPad() const;
+    void writeMasterSystemPad(uint8_t padStatus) const;
+    bool readSelectPin() const { return port_.readSelectPin(); }
 
 private:
+    PadPort& port_;
     PadType detectedType_ = PAD_NONE;
-
-    static void setSelect(byte level);
-    static byte readPort();
-    static void setSelectLineOutput();
-    static void setSelectLineInput();
-    static bool anyButtonPressed(byte port);
-    static bool leftAndRightPressed(byte port);
-
+    static bool anyButtonPressed(uint8_t port);
+    static bool leftAndRightPressed(uint8_t port);
     void selectMegaDrivePad();
     void selectMasterSystemPad();
-
 #ifdef DEBUG_PAD
-    static void debugMegaDriveButtons(word status);
-    static void debugMasterSystemButtons(byte status);
+    static void debugMegaDriveButtons(uint16_t status);
+    static void debugMasterSystemButtons(uint8_t status);
 #endif
 };
-
-extern PadController padController;

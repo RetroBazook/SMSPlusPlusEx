@@ -9,37 +9,27 @@
  *******************************************************************************/
 
 #pragma once
-
 #include <Arduino.h>
 #include "Config.h"
+#include "DebouncedButton.h"
 #include "Types.h"
-
+class VideoModeManager;
 class ConsoleController {
 public:
-    void holdReset();
-    void releaseReset();
-    void pulseReset();
-
-    void holdPause();
-    void releasePause();
-    void pulsePause();
-
-    void initializeInputs();
-    void updateResetButton();
-    void updatePauseButton(bool gamepadStartPressed);
-
-    bool isThActive() const;
-
+    explicit ConsoleController(VideoModeManager& video);
+    void holdReset(); void releaseReset(); void pulseReset();
+    void holdPause(); void releasePause(); void pulsePause();
+    void initializeInputs(); void updateResetButton(); void updatePauseButton(bool gamepadStartPressed);
 #ifdef FMSOUND_OUT_PIN
-    void initializeFmSound();
-    void switchFmSoundAndReset(SwitchMode mode);
+    void initializeFmSound(); void switchFmSoundAndReset(SwitchMode mode);
 #endif
-
 private:
+    VideoModeManager& video_;
+    DebouncedButton resetButton_;
+    DebouncedButton pauseButton_;
 #ifdef FMSOUND_OUT_PIN
-    SwitchMode currentFmMode_ = PSG;
+    SwitchMode currentFmMode_=PSG;
 #endif
-
 #ifdef RESET_IN_PIN
     static byte readResetInput();
 #endif
@@ -47,5 +37,3 @@ private:
     static byte readPauseInput(bool gamepadStartPressed);
 #endif
 };
-
-extern ConsoleController consoleController;

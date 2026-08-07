@@ -15,8 +15,6 @@
 #include "Debug.h"
 #include "VideoModeManager.h"
 
-VideoModeManager videoModeManager;
-
 namespace {
 #if defined(MODE_LED_R_PIN) || defined(MODE_LED_G_PIN)
 constexpr byte kModeLedColors[][2] = {
@@ -94,38 +92,34 @@ void VideoModeManager::begin() {
     pinMode(VIDEOMODE_PIN, OUTPUT);
     currentMode_ = VID_50HZ;
 
-#ifdef MODE_ROM_OFFSET
-    const byte storedMode = EEPROM.read(MODE_ROM_OFFSET);
+    const byte storedMode = EEPROM.read(FirmwareConfig::EepromAddress::VideoMode);
     debug(F("Loaded video mode from EEPROM: "));
     debugln(storedMode);
     if (storedMode < VID_MODES_NO) {
         currentMode_ = static_cast<VideoMode>(storedMode);
     }
-#endif
 
     set(currentMode_);
     lastChangeAt_ = 0;
 }
 
 void VideoModeManager::saveIfNeeded() {
-#ifdef MODE_ROM_OFFSET
-    if (lastChangeAt_ == 0 || millis() - lastChangeAt_ < MODE_SAVE_DELAY) {
+    if (lastChangeAt_ == 0 || millis() - lastChangeAt_ < FirmwareConfig::Timing::VideoModeSaveDelayMs) {
         return;
     }
 
     debug(F("Saving video mode to EEPROM: "));
     debugln(currentMode_);
 
-    const byte storedMode = EEPROM.read(MODE_ROM_OFFSET);
+    const byte storedMode = EEPROM.read(FirmwareConfig::EepromAddress::VideoMode);
     if (storedMode != static_cast<byte>(currentMode_)) {
-        EEPROM.write(MODE_ROM_OFFSET, static_cast<byte>(currentMode_));
+        EEPROM.write(FirmwareConfig::EepromAddress::VideoMode, static_cast<byte>(currentMode_));
     } else {
         debugln(F("Mode unchanged, not saving"));
     }
 
     lastChangeAt_ = 0;
     blinkSaved();
-#endif
 }
 
 void VideoModeManager::set(VideoMode mode) {
